@@ -7,7 +7,7 @@ CONTAINS
      &           HYDRO_dt,sfcheadrt,INFXSRT,soldrain,                 &
      &           acgrdflx,achfx,aclhf                                 &
      &          ,acsnom,acsnow,snowfallac,akhs,akms,albedo,br,canwat  &
-     &          ,chklowq,dt,dx,dx2d,area2d,dz8w,dzs,glw               &
+     &          ,chklowq,dt,dx,dz8w,dzs,glw                           &
      &          ,grdflx,gsw,swdown,gz1oz0,hfx,ht,ifsnow,isfflx        &
      &          ,fractional_seaice,seaice_albedo_opt                  &
      &          ,seaice_albedo_default,seaice_thickness_opt,          &
@@ -31,7 +31,7 @@ CONTAINS
      &          ,th10,th2,thz0,th_phy,tmn,tshltr,tsk,tslb             &
      &          ,tyr,tyra,tdly,tlag,lagday,nyear,nday,tmn_update,yr   &
      &          ,t_phy,u10,udrunoff,ust,uz0                           &
-     &          ,u_frame,u_phy,v10,vegfra,u10e,v10e,uoce,voce         &
+     &          ,u_frame,u_phy,v10,vegfra,uoce,voce                   &
      &          ,vz0,v_frame,v_phy,warm_rain,wspd,xice,xland,z,znt    &
      &          ,max_edom,cplmask                                     &
 #if (HWRF==1)
@@ -48,17 +48,13 @@ CONTAINS
      &          ,flqc,flhc,psfc,sst,sst_input,sstsk,dtw,sst_update,sst_skin     &
      &          ,scm_force_skintemp,scm_force_flux,t2,emiss           &
      &          ,sf_sfclay_physics,sf_surface_physics,ra_lw_physics   & 
-     &          ,bl_pbl_physics                                       &
      &          ,mosaic_lu,mosaic_soil                                &
      &          ,landusef,soilctop,soilcbot,ra,rs,nlcat,nscat,vegf_px & ! PX-LSM
      &          ,snowncv, anal_interval, lai, imperv, canfra          & ! PX-LSM
      &          ,pxlsm_smois_init, pxlsm_soil_nudge                   & ! PX-LSM
-     &          ,pxlsm_modis_veg, lai_px, wwlt_px, wfc_px                           & ! PX-LSM
-     &          ,wsat_px, clay_px, csand_px, fmsand_px                              & ! PX-LSM
      &          ,idveg    ,iopt_crs  ,iopt_btr  ,iopt_run  ,iopt_sfc  ,iopt_frz     &
      &          ,iopt_inf ,iopt_rad  ,iopt_alb  ,iopt_snf  ,iopt_tbot ,iopt_stc     &
-     &          ,iopt_gla ,iopt_rsf  ,iopt_soil ,iopt_pedo ,iopt_crop               &
-     &          ,soilcomp  , soilcl1, soilcl2, soilcl3, soilcl4                     &
+     &          ,iopt_gla ,iopt_rsf                                                 &
      &          ,isnowxy  ,tvxy      ,tgxy      ,canicexy  ,canliqxy  ,eahxy        &
      &          ,tahxy    ,cmxy      ,chxy      ,fwetxy    ,sneqvoxy  ,alboldxy     &
      &          ,qsnowxy  ,wslakexy  ,zwtxy     ,waxy      ,wtxy      ,tsnoxy       &
@@ -74,16 +70,27 @@ CONTAINS
      &          ,shgxy    ,shcxy     ,shbxy     ,evgxy     ,evbxy     ,ghvxy        &
      &          ,ghbxy    ,irgxy     ,ircxy     ,irbxy     ,trxy      ,evcxy        &
      &          ,chleafxy ,chucxy    ,chv2xy    ,chb2xy    ,chstarxy                &                      
+! Headwaters extra output fields
+     &          ,qintsxy   ,qintrxy   ,qdripsxy   &
+     &          ,qdriprxy  ,qthrosxy  ,qthrorxy   & 
+     &          ,qsnsubxy  ,qsnfroxy  ,qsubcxy    &
+     &          ,qfrocxy   ,qevacxy   ,qdewcxy,qfrzcxy   ,qmeltcxy   &
+     &          ,qsnbotxy  ,pondingxy ,PAHXY,PAHGXY,PAHVXY,PAHBXY,ICGXY,IGCXY,SCGXY,SGCXY&
+     &          ,fpicexy,RAINLSM,SNOWLSM &
+	      ,   forctlsm   ,  forcqlsm  ,   forcplsm   &
+	      ,   forczlsm   ,  forcwlsm &
+              , acc_ssoil, acc_qinsur, acc_qseva, acc_etrani, eflxbxy, soilenergy, snowenergy &
            ! Noah-MP ground water
      &          ,smcwtdxy ,rechxy   ,deeprechxy,fdepthxy,areaxy   ,rivercondxy, riverbedxy &
-     &          ,eqzwt    ,pexpxy   ,qrfxy    ,qspringxy,qslatxy  ,qrfsxy   ,qspringsxy &
+     &          ,eqzwt    ,pexpxy   ,qlatxy  ,qrfxy    ,qspringxy,qslatxy  ,qrfsxy   ,qspringsxy &
      &          ,smoiseq  ,wtddt    ,stepwtd                                            &
-                ,gecros_state                                   & ! Optional gecros crop
      &          ,opt_thcnd                                                 &
            ! Noah UA changes
      &          ,ua_phys,flx4,fvb,fbur,fgsn                                  &
 #if (EM_CORE==1)
-     &          ,ch,fgdp,dfgdp,vdfg,grav_settling                       & ! Katata - fog dep
+     &          ,ch,tsq,qsq,cov,Sh3d,el_pbl,bl_mynn_cloudpdf          & ! MYNN
+     &          ,icloud_bl,qc_bl,cldfra_bl                            & ! MYNN
+     &          ,fgdp,dfgdp,vdfg,grav_settling                        & ! Katata - fog dep
 #endif
      &          ,lakedepth2d,  savedtke12d,  snowdp2d,   h2osno2d       & !lake
      &          ,snl2d,        t_grnd2d,     t_lake3d,   lake_icefrac3d & !lake
@@ -240,18 +247,8 @@ CONTAINS
      &          ,bldt,curr_secs,adapt_step_flag,bldtacttime           & 
          ! Optional urban with BEP
      &          ,sf_urban_physics,gmt,xlat,xlong,julday               &
-     &          ,num_urban_ndm                                        & !multi-layer urban
-     &          ,urban_map_zrd                                        & !multi-layer urban
-     &          ,urban_map_zwd                                        & !multi-layer urban
-     &          ,urban_map_gd                                         & !multi-layer urban
-     &          ,urban_map_zd                                         & !multi-layer urban
-     &          ,urban_map_zdf                                        & !multi-layer urban
-     &          ,urban_map_bd                                         & !multi-layer urban
-     &          ,urban_map_wd                                         & !multi-layer urban
-     &          ,urban_map_gbd                                        & !multi-layer urban
-     &          ,urban_map_fbd                                        & !multi-layer urban
+     &          ,num_urban_layers                                     & !multi-layer urban
      &          ,num_urban_hi                                         & !multi-layer urban
-     &          ,tsk_rural                                            & !multi-layer urban
      &          ,trb_urb4d,tw1_urb4d,tw2_urb4d,tgb_urb4d              & !multi-layer urban
      &          ,tlev_urb3d,qlev_urb3d                                & !multi-layer urban
      &          ,tw1lev_urb3d,tw2lev_urb3d                            & !multi-layer urban
@@ -274,7 +271,6 @@ CONTAINS
      &          ,CANWAT_mosaic,SNOW_mosaic,SNOWH_mosaic,SNOWC_mosaic                              & !danli mosaic
      &          ,ALBEDO_mosaic,ALBBCK_mosaic, EMISS_mosaic, EMBCK_mosaic, ZNT_mosaic, Z0_mosaic   & !danli mosaic
      &          ,HFX_mosaic,QFX_mosaic, LH_mosaic, GRDFLX_mosaic,SNOTIME_mosaic                   & !danli mosaic
-     &          ,RS_mosaic,LAI_mosaic                                 &  !mosaic
      &          ,TR_URB2D_mosaic,TB_URB2D_mosaic                      &  !danli mosaic 
      &          ,TG_URB2D_mosaic,TC_URB2D_mosaic                      &  !danli mosaic 
      &          ,QC_URB2D_mosaic,UC_URB2D_mosaic                      &  !danli mosaic                  
@@ -288,10 +284,6 @@ CONTAINS
      &          ,SDA_HFX, SDA_QFX, HFX_BOTH, QFX_BOTH, QNORM, fasdas  &  !fasdas
      &          ,spp_lsm,pattern_spp_lsm,field_sf                     &  !SPP
      &          ,spp_pbl,pattern_spp_pbl                              &  !SPP
-     &          ,XLAIDYN                                              &
-     &          ,irrigation,sf_surf_irr_scheme, irr_daily_amount      & !IRRIG
-     &          ,irr_start_hour,irr_num_hours,irr_start_julianday     &
-     &          ,irr_end_julianday,irr_freq,irr_ph,irr_rand_field     &
      &                                                             )
 
 #if ( ! NMM_CORE == 1 )
@@ -299,8 +291,6 @@ CONTAINS
                                        ,SFCLAYREVSCHEME           &
                                        ,MYJSFCSCHEME              &
                                        ,QNSESFCSCHEME             &
-                                       ,MYJPBLSCHEME              &
-                                       ,QNSEPBLSCHEME             &
                                        ,GFSSFCSCHEME              &
                                        ,PXSFCSCHEME               &
                                        ,NOAHMPSCHEME              &
@@ -314,16 +304,12 @@ CONTAINS
                                        ,SSIBSCHEME                & !ssib
                                        ,MYNNSFCSCHEME             &
                                        ,OMLSCHEME                 &
-                                       ,PWP3DSCHEME               &
-                                       ,DRIP                      &
-                                       ,CHANNEL                   
+                                       ,PWP3DSCHEME
 #else
    USE module_state_description, ONLY : SFCLAYSCHEME              &
                                        ,SFCLAYREVSCHEME           &
                                        ,MYJSFCSCHEME              &
                                        ,QNSESFCSCHEME             &
-                                       ,MYJPBLSCHEME              &
-                                       ,QNSEPBLSCHEME             &
                                        ,GFSSFCSCHEME              &
                                        ,PXSFCSCHEME               &
                                        ,NOAHMPSCHEME              &
@@ -335,14 +321,13 @@ CONTAINS
                                        ,TEMFSFCSCHEME             &
                                        ,GFDLSFCSCHEME             &
                                        ,SSIBSCHEME                & ! ssib
-                                       ,GFDLSLAB                   
-
+                                       ,GFDLSLAB 
 
 
 #endif
    USE module_model_constants
 ! *** add new modules of schemes here
-   USE module_irrigation
+
    USE module_sf_sfclay
    USE module_sf_myjsfc
    USE module_sf_qnsesfc
@@ -506,9 +491,7 @@ CONTAINS
 !-- t_phy         temperature (K)
 !-- dz8w          dz between full levels (m)
 !-- z             height above sea level (m)
-!-- DX            nominal horizontal space interval (m)
-!-- DX2D          horizontal space interval (m), sqrt(dx/mftx * dy/mfty)
-!-- AREA2D        horizontal cell area (m^2), (dx/mftx * dy/mfty)
+!-- DX            horizontal space interval (m)
 !-- DT            time step (second)
 !-- PSFC          pressure at the surface (Pa)
 !-- SST           sea-surface temperature (K)
@@ -535,20 +518,12 @@ CONTAINS
 !-- SOILCTOP     Top soil fraction                     ! P-X LSM
 !-- SOILCBOT     Bottom soil fraction                  ! P-X LSM
 !-- RA           Aerodynamic resistence                ! P-X LSM
-!-- RS           Stomatal resistence                   ! P-X LSM, also from Noah lsm, lsm_mosaic, or noahmp
+!-- RS           Stomatal resistence                   ! P-X LSM
 !-- VEGF_PX      PX LSM internal LU-based Veg Fraction ! P-X LSM
 !-- IMPERV       Impervious surface fraction           ! P-X LSM
 !-- CANFRA       Canopy/Tree fraction                  ! P-X LSM
 !-- NLCAT        Number of landuse categories          ! P-X LSM
 !-- NSCAT        Number of soil categories             ! P-X LSM
-!-- pxlsm_modis_veg   Flag for using MODIS vegeation LAI and vegF (1 is yes)    ! P-X LSM
-!-- LAI_PX            Computed LAI for PX (m^2/m^2)                             ! P-X LSM
-!-- WWLT_PX           Computed soil wilting point for PX (m^3/m^3)              ! P-X LSM
-!-- WFC_PX            Computed soil field capacity for PX (m^3/m^3)             ! P-X LSM
-!-- WSAT_PX           Computed soil saturation for PX (m^3/m^3)                 ! P-X LSM
-!-- CLAY_PX           Aggregated soil clay fraction for PX (%)                  ! P-X LSM
-!-- CSAND_PX          Aggregated soil coarse sand fraction for PX (%)           ! P-X LSM
-!-- FMSAND_PX         Aggregated soil fine-medium sand fraction for PX (%)      ! P-X LSM
 !-- ch - drag coefficient for heat/moisture            ! MYNN LSM
 
 !
@@ -607,7 +582,7 @@ CONTAINS
 
    INTEGER, INTENT(IN) :: sf_sfclay_physics, sf_surface_physics,      &
                           sf_urban_physics,ra_lw_physics,sst_update,  &
-                          ra_sw_physics, bl_pbl_physics
+                          ra_sw_physics                    
    INTEGER, INTENT(IN),OPTIONAL :: sst_skin, tmn_update,              &
                                    scm_force_skintemp, scm_force_flux 
 
@@ -823,8 +798,6 @@ CONTAINS
    REAL, DIMENSION( ims:ime, jms:jme ), INTENT(OUT)::   TSHLTR
    REAL, DIMENSION( ims:ime, jms:jme ), INTENT(OUT)::   U10
    REAL, DIMENSION( ims:ime, jms:jme ), INTENT(OUT)::   V10
-   REAL, DIMENSION( ims:ime, jms:jme ), INTENT(OUT)::   U10E
-   REAL, DIMENSION( ims:ime, jms:jme ), INTENT(OUT)::   V10E
    REAL, DIMENSION( ims:ime, jms:jme ), INTENT(OUT)::   UOCE
    REAL, DIMENSION( ims:ime, jms:jme ), INTENT(OUT)::   VOCE
    REAL, DIMENSION( ims:ime, jms:jme ), INTENT(OUT)::   PSFC
@@ -858,7 +831,6 @@ CONTAINS
    REAL, DIMENSION(1:num_soil_layers), INTENT(IN)::   ZS
    REAL, INTENT(IN )::   DT
    REAL, INTENT(IN )::   DX
-   REAL, DIMENSION( ims:ime , jms:jme ), INTENT(IN ), OPTIONAL :: DX2D, AREA2D
    REAL,       INTENT(IN   ),OPTIONAL    ::     bldt
    REAL,       INTENT(IN   ),OPTIONAL    ::     curr_secs
    LOGICAL,    INTENT(IN   ),OPTIONAL    ::     adapt_step_flag
@@ -878,9 +850,7 @@ CONTAINS
 
    INTEGER, OPTIONAL, INTENT(IN) ::    idveg, iopt_crs, iopt_btr, iopt_run, iopt_sfc , iopt_frz, &
                                     iopt_inf, iopt_rad, iopt_alb, iopt_snf, iopt_tbot, iopt_stc, &
-				    iopt_gla, iopt_rsf, iopt_soil,iopt_pedo,iopt_crop
-   REAL,    OPTIONAL, DIMENSION(ims:ime ,8, jms:jme), INTENT(IN) :: SOILCOMP
-   REAL,    OPTIONAL, DIMENSION(ims:ime , jms:jme)  , INTENT(IN) :: SOILCL1,SOILCL2,SOILCL3,SOILCL4
+				    iopt_gla, iopt_rsf
 
    INTEGER, OPTIONAL, DIMENSION(ims:ime , jms:jme),                    INTENT(INOUT) :: ISNOWXY,   PGSXY
    REAL,    OPTIONAL, DIMENSION(ims:ime ,-2:num_soil_layers, jms:jme), INTENT(INOUT) :: ZSNSOXY
@@ -894,6 +864,17 @@ CONTAINS
 	  SAVXY,   SAGXY, RSSUNXY, RSSHAXY,  BGAPXY,  WGAPXY,   TGVXY,   TGBXY,   CHVXY,   CHBXY,   SHGXY, &
 	  SHCXY,   SHBXY,   EVGXY,   EVBXY,   GHVXY,   GHBXY,   IRGXY,   IRCXY,   IRBXY,    TRXY,   EVCXY, &
        CHLEAFXY,  CHUCXY,  CHV2XY,  CHB2XY,CHSTARXY                         
+   REAL, OPTIONAL, DIMENSION(ims:ime , jms:jme)                   , INTENT(INOUT) :: acc_ssoil,acc_qinsur,acc_qseva
+   REAL, OPTIONAL, DIMENSION(ims:ime , jms:jme)                   , INTENT(  OUT) :: eflxbxy,soilenergy, snowenergy
+   REAL, OPTIONAL, DIMENSION(ims:ime , 1:num_soil_layers, jms:jme), INTENT(INOUT) :: acc_etrani
+   
+   REAL, OPTIONAL, DIMENSION(ims:ime , jms:jme), INTENT(INOUT) ::    &
+               qintsxy   ,qintrxy   ,qdripsxy   ,&
+               qdriprxy  ,qthrosxy  ,qthrorxy   ,& 
+               qsnsubxy  ,qsnfroxy  ,qsubcxy    ,&
+               qfrocxy   ,qevacxy   ,qdewcxy,qfrzcxy   ,qmeltcxy   ,&
+               qsnbotxy  ,pondingxy, PAHXY      ,PAHGXY, PAHVXY, PAHBXY,ICGXY,IGCXY,SCGXY,SGCXY,&
+	       fpicexy,RAINLSM,SNOWLSM,forctlsm,forcqlsm,forcplsm,forczlsm,forcwlsm
    INTEGER,    OPTIONAL, DIMENSION(ims:ime , jms:jme), INTENT(IN) :: CROPCAT
    REAL,    OPTIONAL, DIMENSION(ims:ime , jms:jme), INTENT(IN) :: PLANTING
    REAL,    OPTIONAL, DIMENSION(ims:ime , jms:jme), INTENT(IN) :: HARVEST
@@ -906,9 +887,7 @@ CONTAINS
    REAL,    OPTIONAL, DIMENSION(ims:ime , 1:num_soil_layers, jms:jme ), INTENT(INOUT)::  smoiseq
    REAL,    OPTIONAL, DIMENSION(ims:ime , jms:jme),                    INTENT(INOUT) ::  &
     SMCWTDXY,   RECHXY, DEEPRECHXY, FDEPTHXY,  AREAXY,  RIVERCONDXY, RIVERBEDXY,  &
-    EQZWT,      PEXPXY, QRFXY,      QSPRINGXY, QSLATXY, QRFSXY,      QSPRINGSXY                         
-
-   REAL,    OPTIONAL, DIMENSION(ims:ime,60,jms:jme) :: gecros_state                  ! Optional gecros crop
+    EQZWT,      PEXPXY, QLATXY, QRFXY,      QSPRINGXY, QSLATXY, QRFSXY,      QSPRINGSXY                         
 
    INTEGER, INTENT(IN )::   OPT_THCND
 ! Noah UA changes
@@ -919,39 +898,29 @@ CONTAINS
    REAL, OPTIONAL, INTENT(IN  )   ::                                   GMT 
    INTEGER, OPTIONAL, INTENT(IN  ) ::                               JULDAY
    REAL, OPTIONAL, DIMENSION( ims:ime, jms:jme ), INTENT(IN   )        ::XLAT, XLONG
-   INTEGER , INTENT(IN)        ::     num_urban_ndm
-   INTEGER , INTENT(IN)        ::     urban_map_zrd
-   INTEGER , INTENT(IN)        ::     urban_map_zwd
-   INTEGER , INTENT(IN)        ::     urban_map_gd
-   INTEGER , INTENT(IN)        ::     urban_map_zd
-   INTEGER , INTENT(IN)        ::     urban_map_zdf
-   INTEGER , INTENT(IN)        ::     urban_map_bd
-   INTEGER , INTENT(IN)        ::     urban_map_wd
-   INTEGER , INTENT(IN)        ::     urban_map_gbd
-   INTEGER , INTENT(IN)        ::     urban_map_fbd
+   INTEGER, INTENT(IN )::   NUM_URBAN_LAYERS
    INTEGER, INTENT(IN )::   NUM_URBAN_HI
-   REAL, OPTIONAL, DIMENSION( ims:ime,                     jms:jme ), INTENT(INOUT) :: tsk_rural
-   REAL, OPTIONAL, DIMENSION( ims:ime, 1:urban_map_zrd, jms:jme ), INTENT(INOUT) :: trb_urb4d
-   REAL, OPTIONAL, DIMENSION( ims:ime, 1:urban_map_zwd, jms:jme ), INTENT(INOUT) :: tw1_urb4d
-   REAL, OPTIONAL, DIMENSION( ims:ime, 1:urban_map_zwd, jms:jme ), INTENT(INOUT) :: tw2_urb4d
-   REAL, OPTIONAL, DIMENSION( ims:ime, 1:urban_map_gd,  jms:jme ), INTENT(INOUT) :: tgb_urb4d
-   REAL, OPTIONAL, DIMENSION( ims:ime, 1:urban_map_bd,  jms:jme ), INTENT(INOUT) :: tlev_urb3d
-   REAL, OPTIONAL, DIMENSION( ims:ime, 1:urban_map_bd,  jms:jme ), INTENT(INOUT) :: qlev_urb3d
-   REAL, OPTIONAL, DIMENSION( ims:ime, 1:urban_map_wd,  jms:jme ), INTENT(INOUT) :: tw1lev_urb3d
-   REAL, OPTIONAL, DIMENSION( ims:ime, 1:urban_map_wd,  jms:jme ), INTENT(INOUT) :: tw2lev_urb3d
-   REAL, OPTIONAL, DIMENSION( ims:ime, 1:urban_map_gbd, jms:jme ), INTENT(INOUT) :: tglev_urb3d
-   REAL, OPTIONAL, DIMENSION( ims:ime, 1:urban_map_fbd, jms:jme ), INTENT(INOUT) :: tflev_urb3d
+   REAL, OPTIONAL, DIMENSION( ims:ime, 1:num_urban_layers, jms:jme ), INTENT(INOUT) :: trb_urb4d
+   REAL, OPTIONAL, DIMENSION( ims:ime, 1:num_urban_layers, jms:jme ), INTENT(INOUT) :: tw1_urb4d
+   REAL, OPTIONAL, DIMENSION( ims:ime, 1:num_urban_layers, jms:jme ), INTENT(INOUT) :: tw2_urb4d
+   REAL, OPTIONAL, DIMENSION( ims:ime, 1:num_urban_layers, jms:jme ), INTENT(INOUT) :: tgb_urb4d
+   REAL, OPTIONAL, DIMENSION( ims:ime, 1:num_urban_layers, jms:jme ), INTENT(INOUT) :: tlev_urb3d
+   REAL, OPTIONAL, DIMENSION( ims:ime, 1:num_urban_layers, jms:jme ), INTENT(INOUT) :: qlev_urb3d
+   REAL, OPTIONAL, DIMENSION( ims:ime, 1:num_urban_layers, jms:jme ), INTENT(INOUT) :: tw1lev_urb3d
+   REAL, OPTIONAL, DIMENSION( ims:ime, 1:num_urban_layers, jms:jme ), INTENT(INOUT) :: tw2lev_urb3d
+   REAL, OPTIONAL, DIMENSION( ims:ime, 1:num_urban_layers, jms:jme ), INTENT(INOUT) :: tglev_urb3d
+   REAL, OPTIONAL, DIMENSION( ims:ime, 1:num_urban_layers, jms:jme ), INTENT(INOUT) :: tflev_urb3d
    REAL, OPTIONAL, DIMENSION( ims:ime, jms:jme ), INTENT(INOUT) :: lf_ac_urb3d
    REAL, OPTIONAL, DIMENSION( ims:ime, jms:jme ), INTENT(INOUT) :: sf_ac_urb3d
    REAL, OPTIONAL, DIMENSION( ims:ime, jms:jme ), INTENT(INOUT) :: cm_ac_urb3d
    REAL, OPTIONAL, DIMENSION( ims:ime, jms:jme ), INTENT(INOUT) :: sfvent_urb3d
    REAL, OPTIONAL, DIMENSION( ims:ime, jms:jme ), INTENT(INOUT) :: lfvent_urb3d
-   REAL, OPTIONAL, DIMENSION( ims:ime, 1:urban_map_wd,  jms:jme ), INTENT(INOUT) :: sfwin1_urb3d
-   REAL, OPTIONAL, DIMENSION( ims:ime, 1:urban_map_wd,  jms:jme ), INTENT(INOUT) :: sfwin2_urb3d
-   REAL, OPTIONAL, DIMENSION( ims:ime, 1:urban_map_zd,  jms:jme ), INTENT(INOUT) :: sfw1_urb3d
-   REAL, OPTIONAL, DIMENSION( ims:ime, 1:urban_map_zd,  jms:jme ), INTENT(INOUT) :: sfw2_urb3d
-   REAL, OPTIONAL, DIMENSION( ims:ime, 1:urban_map_zdf, jms:jme ), INTENT(INOUT) :: sfr_urb3d
-   REAL, OPTIONAL, DIMENSION( ims:ime, 1:num_urban_ndm, jms:jme ), INTENT(INOUT) :: sfg_urb3d
+   REAL, OPTIONAL, DIMENSION( ims:ime, 1:num_urban_layers, jms:jme ), INTENT(INOUT) :: sfwin1_urb3d
+   REAL, OPTIONAL, DIMENSION( ims:ime, 1:num_urban_layers, jms:jme ), INTENT(INOUT) :: sfwin2_urb3d
+   REAL, OPTIONAL, DIMENSION( ims:ime, 1:num_urban_layers, jms:jme ), INTENT(INOUT) :: sfw1_urb3d
+   REAL, OPTIONAL, DIMENSION( ims:ime, 1:num_urban_layers, jms:jme ), INTENT(INOUT) :: sfw2_urb3d
+   REAL, OPTIONAL, DIMENSION( ims:ime, 1:num_urban_layers, jms:jme ), INTENT(INOUT) :: sfr_urb3d
+   REAL, OPTIONAL, DIMENSION( ims:ime, 1:num_urban_layers, jms:jme ), INTENT(INOUT) :: sfg_urb3d
    REAL, OPTIONAL, DIMENSION( ims:ime, 1:num_urban_hi, jms:jme ), INTENT(IN)  :: hi_urb2d  !urban
    REAL, OPTIONAL, DIMENSION( ims:ime, jms:jme ), INTENT(IN)  :: lp_urb2d  !urban
    REAL, OPTIONAL, DIMENSION( ims:ime, jms:jme ), INTENT(IN)  :: lb_urb2d  !urban
@@ -991,6 +960,10 @@ CONTAINS
    INTEGER, OPTIONAL, INTENT(IN)                                :: grav_settling
 !Katata-end
 
+   REAL, DIMENSION( ims:ime , kms:kme, jms:jme ), &
+        &OPTIONAL, INTENT(IN   ):: tsq,qsq,cov,Sh3d,el_pbl,qc_bl,cldfra_bl
+   INTEGER, OPTIONAL, INTENT(IN)                                :: bl_mynn_cloudpdf, &
+                                                                   icloud_bl
 #endif
 
 
@@ -1014,9 +987,7 @@ CONTAINS
 !
 !  PX LSM Surface Grid Analysis nudging
 !
-   INTEGER, OPTIONAL, INTENT(IN)    :: pxlsm_smois_init, pxlsm_soil_nudge,  &
-                                       ANAL_INTERVAL, pxlsm_modis_veg
-
+   INTEGER, OPTIONAL, INTENT(IN)    :: pxlsm_smois_init, pxlsm_soil_nudge, ANAL_INTERVAL
    REAL, DIMENSION( ims:ime, NLCAT, jms:jme ) , OPTIONAL, INTENT(INOUT)::   LANDUSEF
    REAL, DIMENSION( ims:ime, NSCAT, jms:jme ) , OPTIONAL, INTENT(INOUT)::   SOILCTOP, SOILCBOT
    REAL, DIMENSION( ims:ime , jms:jme ), OPTIONAL, INTENT(INOUT):: IMPERV, CANFRA
@@ -1024,14 +995,16 @@ CONTAINS
    REAL, DIMENSION( ims:ime, jms:jme ) , OPTIONAL, INTENT(INOUT):: RA
    REAL, DIMENSION( ims:ime, jms:jme ) , OPTIONAL, INTENT(INOUT):: RS
    REAL, DIMENSION( ims:ime, jms:jme ) , OPTIONAL, INTENT(INOUT):: LAI
-   REAL, DIMENSION( ims:ime, jms:jme ), OPTIONAL, INTENT(OUT)::   T2OBS,  Q2OBS, LAI_PX
-   REAL, DIMENSION( ims:ime, jms:jme ), OPTIONAL, INTENT(OUT)::  WWLT_PX, WFC_PX, WSAT_PX,    & 
-                                                                 CLAY_PX, CSAND_PX, FMSAND_PX                                       
+   REAL, DIMENSION( ims:ime, jms:jme ), OPTIONAL, INTENT(OUT)::   T2OBS
+   REAL, DIMENSION( ims:ime, jms:jme ), OPTIONAL, INTENT(OUT)::   Q2OBS
 
-   REAL,       DIMENSION( ims:ime,  jms:jme ),                                     &
-               OPTIONAL, INTENT(INOUT)    ::  t2_ndg_old, t2_ndg_new, q2_ndg_old,  &
-                                              q2_ndg_new, sn_ndg_old, sn_ndg_new 
-
+   REAL,       DIMENSION( ims:ime,  jms:jme ),                           &
+               OPTIONAL, INTENT(INOUT)    ::      t2_ndg_old,            &
+                                                  q2_ndg_old,            &
+                                                  t2_ndg_new,            &
+                                                  q2_ndg_new,            &
+                                                  sn_ndg_old,            &
+                                                  sn_ndg_new
 !
 !
 ! Flags relating to the optional tendency arrays declared above
@@ -1189,7 +1162,7 @@ CONTAINS
 !
    INTEGER :: i,J,K,NK,jj,ij
    INTEGER :: gfdl_ntsflg
-   LOGICAL :: radiation, myj, myjpbl, frpcpn, isisfc
+   LOGICAL :: radiation, myj, frpcpn, isisfc
    LOGICAL, INTENT(in), OPTIONAL :: rdlai2d
    LOGICAL, INTENT(in), OPTIONAL :: usemonalb
    REAL    :: total_depth,mid_point_depth
@@ -1280,8 +1253,7 @@ CONTAINS
         TSK_mosaic, QSFC_mosaic, CANWAT_mosaic, SNOW_mosaic,SNOWH_mosaic, SNOWC_mosaic
   REAL, DIMENSION( ims:ime, 1:mosaic_cat, jms:jme ) , OPTIONAL, INTENT(INOUT)::   &
         ALBEDO_mosaic,ALBBCK_mosaic, EMISS_mosaic, EMBCK_mosaic, ZNT_mosaic, Z0_mosaic,   &
-        HFX_mosaic,QFX_mosaic, LH_mosaic,GRDFLX_mosaic,SNOTIME_mosaic, &
-        RS_mosaic,LAI_mosaic
+        HFX_mosaic,QFX_mosaic, LH_mosaic, GRDFLX_mosaic,SNOTIME_mosaic    
   REAL, DIMENSION( ims:ime, 1:num_soil_layers*mosaic_cat, jms:jme ), OPTIONAL, INTENT(INOUT)::   &
         TSLB_mosaic,SMOIS_mosaic,SH2O_mosaic
 
@@ -1385,21 +1357,6 @@ CONTAINS
    REAL                                                ::   HFX_KAY, QFX_KAY
 ! local var for SPP_LSM
    INTEGER                                             ::   spp_lsm_loc
-
-   real,    optional,  dimension(ims:ime,jms:jme ),intent(inout) :: XLAIDYN
-! IRRIGATION
-   INTEGER :: tloc, jmonth,timing  
-   REAL, PARAMETER    :: PI_GRECO=3.14159 
-   INTEGER  :: end_hour, irr_start,xt24,irr_day  
-   REAL :: constants_irrigation   
-   REAL,DIMENSION( ims:ime, jms:jme ) :: IRRIGATION_CHANNEL      
-   REAL, DIMENSION( ims:ime , jms:jme ), INTENT(IN),OPTIONAL::   IRRIGATION
-   REAL,  INTENT(IN),OPTIONAL::  irr_daily_amount     
-   INTEGER :: phase
-   INTEGER, DIMENSION( ims:ime , jms:jme ), INTENT(INOUT),OPTIONAL :: irr_rand_field
-   INTEGER, INTENT(IN ),OPTIONAL:: sf_surf_irr_scheme,irr_start_hour,irr_num_hours,irr_start_julianday,irr_end_julianday,irr_freq,irr_ph
-
-
 !
 !------------------------------------------------------------------
 ! Initialize local variables
@@ -1498,28 +1455,6 @@ CONTAINS
          RAINBL(i,j) = RAINBL(i,j) + RAINCV(i,j) + RAINNCV(i,j)
          IF ( PRESENT( rainshv ))RAINBL(i,j) = RAINBL(i,j) + RAINSHV(i,j)
          RAINBL(i,j) = MAX (RAINBL(i,j), 0.0)
-#if (EM_CORE==1)
-         sf_surf_irr: SELECT CASE(sf_surf_irr_scheme)
-            CASE(DRIP)
-               CALL drip_irrigation(                                     &
-                &  julian_in,IRRIGATION(i,j),sf_surf_irr_scheme,         &
-                &  irr_daily_amount,irr_start_hour,irr_num_hours,        &
-                &  irr_start_julianday,irr_end_julianday,                &
-                &  irr_freq,irr_ph,i,j,RAINBL(i,j),                      &
-                &  IRRIGATION_CHANNEL(i,j),gmt,xtime,dt,                 &
-                &  irr_rand_field(i,j)                                   &
-                   )
-            CASE(CHANNEL)
-               CALL channel_irrigation(                                  &
-                &  julian_in,IRRIGATION(i,j),sf_surf_irr_scheme,         &
-                &  irr_daily_amount,irr_start_hour,irr_num_hours,        &
-                &  irr_start_julianday,irr_end_julianday,                &
-                &  irr_freq,irr_ph,i,j,RAINBL(i,j),                      &
-                &  IRRIGATION_CHANNEL(i,j),gmt,xtime,dt,                 &
-                &  irr_rand_field(i,j)                                   &
-                   )
-           END SELECT sf_surf_irr
-#endif
       ENDDO
       ENDDO
     ENDDO
@@ -1533,31 +1468,6 @@ CONTAINS
          RAINBL(i,j) = RAINBL(i,j) + RAINCV(i,j)
          IF ( PRESENT( rainshv ))RAINBL(i,j) = RAINBL(i,j) + RAINSHV(i,j)
          RAINBL(i,j) = MAX (RAINBL(i,j), 0.0)
-
-#if (EM_CORE==1)
-          sf_surf_irr1: SELECT CASE(sf_surf_irr_scheme)
-             CASE(DRIP)
-               CALL drip_irrigation(                                     &
-                &  julian_in,IRRIGATION(i,j),sf_surf_irr_scheme,         &
-                &  irr_daily_amount,irr_start_hour,irr_num_hours,        &
-                &  irr_start_julianday,irr_end_julianday,                &
-                &  irr_freq,irr_ph,i,j,RAINBL(i,j),                      &
-                &  IRRIGATION_CHANNEL(i,j),gmt,xtime,dt,                 &
-                &  irr_rand_field(i,j)                                   &
-                   )
-
-            CASE(CHANNEL)
-               CALL channel_irrigation(                                  &
-                &  julian_in,IRRIGATION(i,j),sf_surf_irr_scheme,         &
-                &  irr_daily_amount,irr_start_hour,irr_num_hours,        &
-                &  irr_start_julianday,irr_end_julianday,                &
-                &  irr_freq,irr_ph,i,j,RAINBL(i,j),                      &
-                &  IRRIGATION_CHANNEL(i,j),gmt,xtime,dt,                 &
-                &  irr_rand_field(i,j)                                   &
-                   )
-        END SELECT sf_surf_irr1
-#endif
-
       ENDDO
       ENDDO
     ENDDO
@@ -1829,10 +1739,6 @@ CONTAINS
   frpcpn = .false.
   myj    = ((sf_sfclay_physics .EQ. MYJSFCSCHEME) .OR. &
             (sf_sfclay_physics .EQ. QNSESFCSCHEME) )
-
-  myjpbl = ((bl_pbl_physics .EQ. MYJPBLSCHEME) .OR. &
-            (bl_pbl_physics .EQ. QNSEPBLSCHEME) )
-
   isisfc = ( FRACTIONAL_SEAICE .EQ. 1  .AND. (          &
             (sf_sfclay_physics .EQ. SFCLAYSCHEME ) .OR. &
             (sf_sfclay_physics .EQ. SFCLAYREVSCHEME ) .OR. &
@@ -1977,7 +1883,7 @@ CONTAINS
                  znt,ust,pblh,mavail,zol,mol,regime,psim,psih,fm,fhh, &
                  xland,hfx,qfx,lh,tsk,flhc,flqc,qgh,qsfc,rmol,       &
                  u10,v10,th2,t2,q2,                                  &
-                 gz1oz0,wspd,br,isfflx,dx2d,                         &
+                 gz1oz0,wspd,br,isfflx,dx,                           &
                  svp1,svp2,svp3,svpt0,ep_1,ep_2,karman,eomeg,stbolt, &
                  P1000mb,                                            &
                  XICE,SST,TSK_SEA,                                                  &
@@ -1995,7 +1901,7 @@ CONTAINS
                znt,ust,pblh,mavail,zol,mol,regime,psim,psih,fm,fhh, &
                xland,hfx,qfx,lh,tsk,flhc,flqc,qgh,qsfc,rmol,       &
                u10,v10,th2,t2,q2,                                  &
-               gz1oz0,wspd,br,isfflx,dx2d,                         &
+               gz1oz0,wspd,br,isfflx,dx,                           &
                svp1,svp2,svp3,svpt0,ep_1,ep_2,karman,eomeg,stbolt, &
                P1000mb,                                            &
                ids,ide, jds,jde, kds,kde,                          &
@@ -2131,7 +2037,7 @@ CONTAINS
                 br,                                                 &
                 chs,chs2,cqs2,hfx,qfx,lh,flhc,flqc,qgh,cpm,ct,       &
                 u10,v10,t2,th2,tshltr,th10,q2,qshltr,q10,pshltr,               &
-                p1000mb,u10e,v10e,                                   &
+                p1000mb,                                             &
                 ids,ide, jds,jde, kds,kde,                           &
                 ims,ime, jms,jme, kms,kme,                           &
                 i_start(ij),i_end(ij), j_start(ij),j_end(ij), kts,kte    )
@@ -2148,7 +2054,7 @@ CONTAINS
               br,                                                 &
               chs,chs2,cqs2,hfx,qfx,lh,flhc,flqc,qgh,cpm,ct,       &
               u10,v10,t2,th2,tshltr,th10,q2,qshltr,q10,pshltr,               &
-              p1000mb,u10e,v10e,                                   &
+              p1000mb,                                             &
               ids,ide, jds,jde, kds,kde,                           &
               ims,ime, jms,jme, kms,kme,                           &
               i_start(ij),i_end(ij), j_start(ij),j_end(ij), kts,kte    )
@@ -2163,15 +2069,6 @@ CONTAINS
 #endif         
 
         ENDIF
-#if ( EM_CORE==1)
-!       ustm is not available in NMM
-!       ustm is needed for LES tke calculation (ustm is ust used in friction)
-         DO j = j_start(ij),j_end(ij)
-            DO i = i_start(ij),i_end(ij)
-               ustm(i,j) = ust(i,j)
-            END DO
-         END DO
-#endif
        ELSE
          CALL wrf_error_fatal('Lacking arguments for MYJSFC in surface driver')
        ENDIF
@@ -2223,8 +2120,7 @@ CONTAINS
                 akhs,akms,                                           &
                 br,                                                 &
                 chs,chs2,cqs2,hfx,qfx,lh,flhc,flqc,qgh,cpm,ct,       &
-                u10,v10,t2,th2,tshltr,th10,q2,qshltr,q10,pshltr,     &
-                u10e,v10e,                                           &
+                u10,v10,t2,th2,tshltr,th10,q2,qshltr,q10,pshltr,               &
                 ids,ide, jds,jde, kds,kde,                           &
                 ims,ime, jms,jme, kms,kme,                           &
                 i_start(ij),i_end(ij), j_start(ij),j_end(ij), kts,kte,SCM_FORCE_FLUX    )
@@ -2240,8 +2136,7 @@ CONTAINS
               akhs,akms,                                           &
               br,                                                 &
               chs,chs2,cqs2,hfx,qfx,lh,flhc,flqc,qgh,cpm,ct,       &
-              u10,v10,t2,th2,tshltr,th10,q2,qshltr,q10,pshltr,     &
-              u10e,v10e,                                           &
+              u10,v10,t2,th2,tshltr,th10,q2,qshltr,q10,pshltr,               &
               ids,ide, jds,jde, kds,kde,                           &
               ims,ime, jms,jme, kms,kme,                           &
               i_start(ij),i_end(ij), j_start(ij),j_end(ij),     &
@@ -2303,8 +2198,8 @@ CONTAINS
 
        IF (PRESENT(qv_curr)    .AND.  PRESENT(qc_curr)     &
             & .AND.  PRESENT(qcg) ) THEN
-
-          CALL wrf_debug(100,'in MYNNSFC')
+          
+          CALL wrf_debug(100,'in MYNNSFC')          
 
          IF (FRACTIONAL_SEAICE == 1) THEN
           CALL MYNN_SEAICE_WRAPPER(u_phytmp,v_phytmp,t_phy,qv_curr,&
@@ -2314,16 +2209,18 @@ CONTAINS
                u10,v10,th2,t2,q2,SNOWH,                            &
                gz1oz0,wspd,br,isfflx,dx,                           &
                svp1,svp2,svp3,svpt0,ep_1,ep_2,karman,              &
-               itimestep,ch,th_phy,pi_phy,qc_curr,rho,qcg,         &
-               spp_pbl,pattern_spp_pbl,                            &
+               &itimestep,ch,th_phy,pi_phy,qc_curr,rho,            &
+               &tsq,qsq,cov,Sh3d,el_pbl,qcg,                       &
+               &icloud_bl,qc_bl,cldfra_bl,                         &
+               &spp_pbl,pattern_spp_pbl,                           &
                XICE,SST,TSK_SEA,                                   &
                CHS2_SEA,CHS_SEA,CPM_SEA,CQS2_SEA,FLHC_SEA,FLQC_SEA,&
                HFX_SEA,LH_SEA,QFX_SEA,QGH_SEA,QSFC_SEA,ZNT_SEA,    &
                TICE2TSK_IF2COLD,XICE_THRESHOLD,                    &
                ids,ide, jds,jde, kds,kde,                          &
                ims,ime, jms,jme, kms,kme,                          &
-               i_start(ij),i_end(ij),j_start(ij),j_end(ij),kts,kte,&   
-               ustm,ck,cka,cd,cda,isftcflx,iz0tlnd                 )
+               i_start(ij),i_end(ij), j_start(ij),j_end(ij), kts,kte, &   
+               ustm,ck,cka,cd,cda,isftcflx,iz0tlnd,bl_mynn_cloudpdf)
          ELSE
           CALL SFCLAY_mynn(u_phytmp,v_phytmp,t_phy,qv_curr,        &
                p_phy,dz8w,cp,g,rcp,r_d,xlv,psfc,chs,chs2,cqs2,cpm, &
@@ -2332,16 +2229,18 @@ CONTAINS
                u10,v10,th2,t2,q2,SNOWH,                            &
                gz1oz0,wspd,br,isfflx,dx,                           &
                svp1,svp2,svp3,svpt0,ep_1,ep_2,karman,              &
-               itimestep,ch,th_phy,pi_phy,qc_curr,rho,qcg,         &
-               spp_pbl,pattern_spp_pbl,                            &
+               &itimestep,ch,th_phy,pi_phy,qc_curr,rho,            &
+               &tsq,qsq,cov,Sh3D,el_pbl,qcg,                       &
+               &icloud_bl,qc_bl,cldfra_bl,                         &
+               &spp_pbl,pattern_spp_pbl,                           &
                ids,ide, jds,jde, kds,kde,                          &
                ims,ime, jms,jme, kms,kme,                          &
                i_start(ij),i_end(ij),j_start(ij),j_end(ij),kts,kte,&
-               ustm,ck,cka,cd,cda,isftcflx,iz0tlnd                 )
+               ustm,ck,cka,cd,cda,isftcflx,iz0tlnd,bl_mynn_cloudpdf)
          ENDIF
        ELSE
           CALL wrf_error_fatal('Lacking arguments for SFCLAY_mynn in surface driver')
-
+ 
        ENDIF
 #endif
 
@@ -2627,16 +2526,6 @@ CONTAINS
          if(HYDRO_dt .ge. 0) HYDRO_dt = dtbl
 #endif
 
-! added RA population for WRF/Noah-CMAQ RS Consistency
-! following Garland et al. (1977) and Nemitz et al., 2009
-         IF ( PRESENT(RA) ) THEN
-         DO j=j_start(ij),j_end(ij)
-         DO i=i_start(ij),i_end(ij)
-            RA(I,J) = WSPD(I,J)/UST(I,J)**2.0
-         ENDDO
-         ENDDO
-         END IF
-
          CALL wrf_debug(100,'in NOAH DRV')
                 
          IF (sf_surface_mosaic == 1) THEN
@@ -2674,8 +2563,7 @@ CONTAINS
                 EMISS_mosaic, EMBCK_mosaic,                     & ! danli mosaic
                 ZNT_mosaic, Z0_mosaic,                          & ! danli mosaic 
                 HFX_mosaic,QFX_mosaic,                          & ! danli mosaic
-                LH_mosaic, GRDFLX_mosaic, SNOTIME_mosaic,       & ! danli mosaic
-                RS_mosaic, LAI_mosaic,                          & ! mosaic
+                LH_mosaic, GRDFLX_mosaic, SNOTIME_mosaic,       & ! danli mosaic          
                 ua_phys,flx4,fvb,fbur,fgsn,                     &
                 ids,ide, jds,jde, kds,kde,                      &
                 ims,ime, jms,jme, kms,kme,                      &
@@ -2710,18 +2598,8 @@ CONTAINS
                 DRELR_URB2D,DRELB_URB2D,DRELG_URB2D,            & !H urban
                 FLXHUMR_URB2D,FLXHUMB_URB2D,FLXHUMG_URB2D,      & !H urban
                 FRC_URB2D, UTYPE_URB2D,                         & !I urban
-                num_urban_ndm,                                  & !I multi-layer urban
-                urban_map_zrd,                                  & !I multi-layer urban
-                urban_map_zwd,                                  & !I multi-layer urban
-                urban_map_gd,                                   & !I multi-layer urban
-                urban_map_zd,                                   & !I multi-layer urban
-                urban_map_zdf,                                  & !I multi-layer urban
-                urban_map_bd,                                   & !I multi-layer urban
-                urban_map_wd,                                   & !I multi-layer urban
-                urban_map_gbd,                                  & !I multi-layer urban
-                urban_map_fbd,                                  & !I multi-layer urban
+                num_urban_layers,                               & !I multi-layer urban
                 num_urban_hi,                                   & !I multi-layer urban
-                tsk_rural,                                      & !H multi-layer urban
                 trb_urb4d,tw1_urb4d,tw2_urb4d,tgb_urb4d,        & !H multi-layer urban
                 tlev_urb3d,qlev_urb3d,                          & !H multi-layer urban
                 tw1lev_urb3d,tw2lev_urb3d,                      & !H multi-layer urban
@@ -2740,7 +2618,8 @@ CONTAINS
                 dl_u_bep,sf_bep,vl_bep                          & !O multi-layer urban
                 ,sfcheadrt,INFXSRT, soldrain                    & !hydro
                 ,SDA_HFX, SDA_QFX, HFX_BOTH, QFX_BOTH, QNORM, fasdas    & ! fasdas
-                ,RS,XLAIDYN)
+                )
+
            ELSE
                CALL wrf_error_fatal('Lack arguments to call lsm_mosaic')
            ENDIF
@@ -2824,18 +2703,8 @@ CONTAINS
                 FLXHUMR_URB2D,FLXHUMB_URB2D,FLXHUMG_URB2D,      & !H urban
                 julian, julyr,                                  & !H urban
                 FRC_URB2D, UTYPE_URB2D,                         & !I urban
-                num_urban_ndm,                                  & !I multi-layer urban
-                urban_map_zrd,                                  & !I multi-layer urban
-                urban_map_zwd,                                  & !I multi-layer urban
-                urban_map_gd,                                   & !I multi-layer urban
-                urban_map_zd,                                   & !I multi-layer urban
-                urban_map_zdf,                                  & !I multi-layer urban
-                urban_map_bd,                                   & !I multi-layer urban
-                urban_map_wd,                                   & !I multi-layer urban
-                urban_map_gbd,                                  & !I multi-layer urban
-                urban_map_fbd,                                  & !I multi-layer urban
+                num_urban_layers,                               & !I multi-layer urban
                 num_urban_hi,                                   & !I multi-layer urban
-                tsk_rural,                                      & !H multi-layer urban
                 trb_urb4d,tw1_urb4d,tw2_urb4d,tgb_urb4d,        & !H multi-layer urban
                 tlev_urb3d,qlev_urb3d,                          & !H multi-layer urban
                 tw1lev_urb3d,tw2lev_urb3d,                      & !H multi-layer urban
@@ -2860,7 +2729,7 @@ CONTAINS
 !
 !  END FASDAS
 !
-                ,RS,XLAIDYN)
+                )
          ENDIF
 
          call seaice_noah( SEAICE_ALBEDO_OPT, SEAICE_ALBEDO_DEFAULT, SEAICE_THICKNESS_OPT, &
@@ -3078,9 +2947,7 @@ CONTAINS
                PLANTING,  HARVEST,SEASON_GDD,                               &
                   IDVEG, IOPT_CRS, IOPT_BTR, IOPT_RUN,  IOPT_SFC,   IOPT_FRZ, &
 	       IOPT_INF, IOPT_RAD, IOPT_ALB, IOPT_SNF, IOPT_TBOT,   IOPT_STC, &
-	       IOPT_GLA, IOPT_RSF, IOPT_SOIL,IOPT_PEDO,IOPT_CROP,             &
-                IZ0TLND, SF_URBAN_PHYSICS,                                    &
-	       SOILCOMP,  SOILCL1,  SOILCL2,  SOILCL3,   SOILCL4,             &
+	       IOPT_GLA, IOPT_RSF,  IZ0TLND, SF_URBAN_PHYSICS,                &
 		  T_PHY,  QV_CURR,    U_PHY,    V_PHY,    SWDOWN,        GLW, &
 		    P8W,   RAINBL,       SR,                                  &
 		    TSK,      HFX,      QFX,       LH,    GRDFLX,     SMSTAV, &
@@ -3094,7 +2961,6 @@ CONTAINS
 		ZSNSOXY,  SNICEXY,  SNLIQXY, LFMASSXY,  RTMASSXY,   STMASSXY, &
 		 WOODXY, STBLCPXY, FASTCPXY,      LAI,    XSAIXY,    TAUSSXY, &
 	        SMOISEQ, SMCWTDXY,DEEPRECHXY,  RECHXY,   GRAINXY,      GDDXY,PGSXY, & ! IN/OUT Noah MP only
-               GECROS_STATE,                                                  & ! IN/OUT gecros model
 	         T2MVXY,   T2MBXY,   Q2MVXY,   Q2MBXY,                        &
                  TRADXY,    NEEXY,    GPPXY,    NPPXY,    FVEGXY,    RUNSFXY, &
 	        RUNSBXY,   ECANXY,   EDIRXY,  ETRANXY,     FSAXY,     FIRAXY, &
@@ -3102,7 +2968,14 @@ CONTAINS
                  BGAPXY,   WGAPXY,    TGVXY,    TGBXY,     CHVXY,      CHBXY, &
 		  SHGXY,    SHCXY,    SHBXY,    EVGXY,     EVBXY,      GHVXY, &
 		  GHBXY,    IRGXY,    IRCXY,    IRBXY,      TRXY,      EVCXY, &
-	       CHLEAFXY,   CHUCXY,   CHV2XY,   CHB2XY,    RS,                 &
+	       CHLEAFXY,   CHUCXY,   CHV2XY,   CHB2XY,                        &                          
+               qintsxy   ,qintrxy   ,qdripsxy   ,&
+               qdriprxy  ,qthrosxy  ,qthrorxy   ,& 
+               qsnsubxy  ,qsnfroxy  ,qsubcxy    ,&
+               qfrocxy   ,qevacxy   ,qdewcxy    ,qfrzcxy   ,qmeltcxy   ,&
+               qsnbotxy  ,pondingxy ,PAHXY      ,PAHGXY, PAHVXY, PAHBXY,ICGXY,IGCXY,SCGXY,SGCXY,&
+	       fpicexy,RAINLSM,SNOWLSM,forctlsm,forcqlsm,forcplsm,forczlsm,forcwlsm,&
+               acc_ssoil, acc_qinsur, acc_qseva, acc_etrani, eflxbxy, soilenergy, snowenergy, &
 #ifdef WRF_HYDRO
                  sfcheadrt,INFXSRT,soldrain,                          &    !O
 #endif
@@ -3143,9 +3016,7 @@ CONTAINS
                              julian,          julyr,                                        & !H urban
                           frc_urb2d,    utype_urb2d,                                        & !I urban
                                 chs,           chs2,           cqs2,                        & !H
-                      num_urban_ndm,  urban_map_zrd,  urban_map_zwd, urban_map_gd,          & !I multi-layer urban
-                       urban_map_zd,  urban_map_zdf,   urban_map_bd, urban_map_wd,          & !I multi-layer urban
-                      urban_map_gbd,  urban_map_fbd,                                        & !I multi-layer urban
+                   num_urban_layers,                                                        & !I multi-layer urban
                        num_urban_hi,                                                        & !I multi-layer urban
                           trb_urb4d,      tw1_urb4d,      tw2_urb4d,  tgb_urb4d,            & !H multi-layer urban
                          tlev_urb3d,     qlev_urb3d,                                        & !H multi-layer urban
@@ -3166,8 +3037,7 @@ CONTAINS
 	 
 	 ENDIF 
 
-  IF ( iopt_run .EQ. 5 ) THEN
-     IF ( MOD(itimestep,STEPWTD) .EQ. 0 ) THEN ! STEPWTD always and only non-zero for iopt_run == 5
+  if(iopt_run.eq.5.and.mod(itimestep,STEPWTD).eq.0)then
            CALL wrf_debug( 100, 'calling WTABLE' )
 
 !gmm update wtable from lateral flow and shed water to rivers
@@ -3176,14 +3046,13 @@ CONTAINS
                                   isltyp,smoiseq,dzs,wtddt,                                 &
                                   fdepthxy,areaxy,ht,isurban,ivgtyp,                         &
                                   rivercondxy,riverbedxy,eqzwt,pexpxy,                      &
-                                  smois,sh2o,smcwtdxy,zwtxy,qrfxy,deeprechxy,qspringxy,     &
+                                  smois,sh2o,smcwtdxy,zwtxy,qlatxy,qrfxy,deeprechxy,qspringxy,     &
                                   qslatxy,qrfsxy,qspringsxy,rechxy,                        &
                                   ids,ide, jds,jde, kds,kde,                             &
                                   ims,ime, jms,jme, kms,kme,                             &
                                   i_start(ij),i_end(ij), j_start(ij),j_end(ij), kts,kte )
 
-     END IF
-  END IF
+  endif
 
          call seaice_noah( SEAICE_ALBEDO_OPT, SEAICE_ALBEDO_DEFAULT, SEAICE_THICKNESS_OPT, &
               &            SEAICE_THICKNESS_DEFAULT, SEAICE_SNOWDEPTH_OPT,             &
@@ -3342,15 +3211,6 @@ CONTAINS
            ENDDO                                                  !urban
          ENDIF
 
-! added RA population for WRF/Noah-CMAQ RS Consistency
-! following Garland et al. (1977) and Nemitz et al., 2009
-         IF ( PRESENT(RA) ) THEN
-         DO j=j_start(ij),j_end(ij)
-         DO i=i_start(ij),i_end(ij)
-            RA(I,J) = WSPD(I,J)/UST(I,J)**2.0
-         ENDDO
-         ENDDO
-         END IF
 !------------------------------------------------------------------
 
        ELSE
@@ -3444,7 +3304,7 @@ CONTAINS
                 sfcrunoff,udrunoff,acrunoff,sfcexc,             &
                 sfcevp,grdflx,snowfallac,acsnow,acsnom,         &
                 smfr3d,keepfr3dflag,                            &
-                myjpbl,shdmin,shdmax,rdlai2d,                   &
+                myj,shdmin,shdmax,rdlai2d,                      &
                 ids,ide, jds,jde, kds,kde,                      &
                 ims,ime, jms,jme, kms,kme,                      &
                 i_start(ij),i_end(ij), j_start(ij),j_end(ij), kts,kte    )
@@ -3561,8 +3421,6 @@ CONTAINS
                      t2_ndg_old,t2_ndg_new,q2_ndg_old,q2_ndg_new,    &
                      sn_ndg_old, sn_ndg_new, snow, snowh,snowncv,    &
                      t2obs, q2obs,pxlsm_smois_init,pxlsm_soil_nudge, &
-                     pxlsm_modis_veg, LAI_PX, WWLT_PX, WFC_PX,       &
-                     WSAT_PX, CLAY_PX, CSAND_PX, FMSAND_PX,          &
                      ids,ide, jds,jde, kds,kde,                      &
                      ims,ime, jms,jme, kms,kme,                      &
                      i_start(ij),i_end(ij), j_start(ij),j_end(ij), kts,kte)
@@ -4010,8 +3868,8 @@ CONTAINS
          U10(i,j) = UV10*u_phytmp(i,1,j)/SQRT(u_phytmp(i,1,j)**2+v_phytmp(i,1,j)**2)
          V10(i,j) = UV10*v_phytmp(i,1,j)/SQRT(u_phytmp(i,1,j)**2+v_phytmp(i,1,j)**2)
 !        Overwrite WSPD to remove convective velocity (wspd=wspd1 in YSU)
-!        WSPD(I,J)=sqrt( u_phytmp(i,1,j)*u_phytmp(i,1,j) +      &
-!                        v_phytmp(i,1,j)*v_phytmp(i,1,j) ) + 1.e-9
+         WSPD(I,J)=sqrt( u_phytmp(i,1,j)*u_phytmp(i,1,j) +      &
+                         v_phytmp(i,1,j)*v_phytmp(i,1,j) ) + 1.e-9
 !
        ENDIF
 !
@@ -4150,23 +4008,6 @@ CONTAINS
        !$OMP END PARALLEL DO
      ENDIF
 
-! Limit Q2 diagnostic to no more than 5 per cent higher than lowest level value
-!     This prevents unrealistic values when QFX is not mostly surface flux 
-!          because calculation is based on surface flux only
-!     Problems occurred in transition periods and weak winds and vegetation source
-       !$OMP PARALLEL DO   &
-       !$OMP PRIVATE ( ij, i, j, k )
-       DO ij = 1 , num_tiles
-         DO j=j_start(ij),j_end(ij)
-         DO i=i_start(ij),i_end(ij)
-            IF (XLAND(I,J).LT.1.5) THEN
-            Q2(i,j) = MIN(Q2(i,j),1.05*QV_CURR(i,1,j))
-            END IF
-         ENDDO
-         ENDDO
-       ENDDO
-       !$OMP END PARALLEL DO
-
      IF( PRESENT(slope_rad).AND. radiation )THEN
 ! topographic slope effects removed from SWDOWN and GSW here for output
        IF (slope_rad .EQ. 1) THEN
@@ -4216,7 +4057,7 @@ CONTAINS
         &     CHS,CHS2,CQS2,HFX,QFX,FLX_LH,FLHC,FLQC,     &
         &     QGH,CPM,CT,                                 &
         &     U10,V10,T02,TH02,TSHLTR,TH10,Q02,QSHLTR,Q10,PSHLTR,          &
-        &     P1000,U10E,V10E,                            &
+        &     P1000,                                        &
         &     IDS,IDE,JDS,JDE,KDS,KDE,                        &
         &     IMS,IME,JMS,JME,KMS,KME,                        &
         &     ITS,ITE,JTS,JTE,KTS,KTE )
@@ -4289,8 +4130,6 @@ CONTAINS
      REAL,DIMENSION(IMS:IME,JMS:JME),        INTENT(OUT)   :: CT
      REAL,DIMENSION(IMS:IME,JMS:JME),        INTENT(OUT)   :: U10
      REAL,DIMENSION(IMS:IME,JMS:JME),        INTENT(OUT)   :: V10
-     REAL,DIMENSION(IMS:IME,JMS:JME),        INTENT(OUT)   :: U10E
-     REAL,DIMENSION(IMS:IME,JMS:JME),        INTENT(OUT)   :: V10E
      REAL,DIMENSION(IMS:IME,JMS:JME),        INTENT(OUT)   :: T02
      REAL,DIMENSION(IMS:IME,JMS:JME),        INTENT(OUT)   :: TH02
      REAL,DIMENSION(IMS:IME,JMS:JME),        INTENT(OUT)   :: TSHLTR
@@ -4313,8 +4152,6 @@ CONTAINS
      REAL, DIMENSION( ims:ime, jms:jme ) :: ct_sea
      REAL, DIMENSION( ims:ime, jms:jme ) :: u10_sea
      REAL, DIMENSION( ims:ime, jms:jme ) :: v10_sea
-     REAL, DIMENSION( ims:ime, jms:jme ) :: u10e_sea
-     REAL, DIMENSION( ims:ime, jms:jme ) :: v10e_sea
      REAL, DIMENSION( ims:ime, jms:jme ) :: t02_sea
      REAL, DIMENSION( ims:ime, jms:jme ) :: th02_sea
      REAL, DIMENSION( ims:ime, jms:jme ) :: tshltr_sea
@@ -4453,7 +4290,7 @@ CONTAINS
           &        QGH, CPM, CT, U10, V10, T02,                    &  ! 0,0,0,0,0,0,
           &        TH02, TSHLTR, TH10, Q02,                        &  ! 0,0,0,0,
           &        QSHLTR, Q10, PSHLTR,                            &  ! 0,0,0,
-          &        P1000, U10E, V10E,                              &  ! I
+          &        P1000,                                        &  ! I
           &        ids,ide, jds,jde, kds,kde,                      &
           &        ims,ime, jms,jme, kms,kme,                      &
           &        its,ite, jts,jte, kts,kte    )
@@ -4507,7 +4344,7 @@ CONTAINS
           &        CHS_SEA, CHS2_SEA, CQS2_SEA, HFX_SEA, QFX_SEA, FLX_LH_SEA, FLHC_SEA,        & ! 0,0,0,0,0,0,0,
           &        FLQC_SEA, QGH_SEA, CPM_SEA, CT_SEA, U10_SEA, V10_SEA, T02_SEA, TH02_SEA,    & ! 0,0,0,0,0,0,0,0,
           &        TSHLTR_SEA, TH10_SEA, Q02_SEA, QSHLTR_SEA, Q10_SEA, PSHLTR_SEA,             & ! 0,0,0,0,0,0,
-          &        p1000, u10e_sea,  v10e_sea,                                                 & ! I
+          &        p1000,                                                                    & ! I
           &        ids,ide, jds,jde, kds,kde,                                                  &
           &        ims,ime, jms,jme, kms,kme,                                                  &
           &        its,ite, jts,jte, kts,kte    )
@@ -4543,8 +4380,6 @@ CONTAINS
               T02(i,j)    = T02(i,j)    * XICE(i,j) + (1.0-XICE(i,j)) * T02_SEA(i,j)
               U10(i,j)    = U10(i,j)    * XICE(i,j) + (1.0-XICE(i,j)) * U10_SEA(i,j)
               V10(i,j)    = V10(i,j)    * XICE(i,j) + (1.0-XICE(i,j)) * V10_SEA(i,j)
-              U10E(i,j)   = U10(i,j)
-              V10E(i,j)   = V10(i,j)
 
               ! INTENT(INOUT):  updated by MYJSFC
               ! QSFC:  wait
@@ -4587,7 +4422,6 @@ CONTAINS
         &     CHS,CHS2,CQS2,HFX,QFX,FLX_LH,FLHC,FLQC,     &
         &     QGH,CPM,CT,                                 &
         &     U10,V10,T02,TH02,TSHLTR,TH10,Q02,QSHLTR,Q10,PSHLTR,          &
-        &     U10E,V10E,                                  &
         &     IDS,IDE,JDS,JDE,KDS,KDE,                        &
         &     IMS,IME,JMS,JME,KMS,KME,                        &
         &     ITS,ITE,JTS,JTE,KTS,KTE,SCM_FORCE_FLUX )
@@ -4657,8 +4491,6 @@ CONTAINS
      REAL,DIMENSION(IMS:IME,JMS:JME),        INTENT(OUT)   :: CT
      REAL,DIMENSION(IMS:IME,JMS:JME),        INTENT(OUT)   :: U10
      REAL,DIMENSION(IMS:IME,JMS:JME),        INTENT(OUT)   :: V10
-     REAL,DIMENSION(IMS:IME,JMS:JME),        INTENT(OUT)   :: U10E
-     REAL,DIMENSION(IMS:IME,JMS:JME),        INTENT(OUT)   :: V10E
      REAL,DIMENSION(IMS:IME,JMS:JME),        INTENT(OUT)   :: T02
      REAL,DIMENSION(IMS:IME,JMS:JME),        INTENT(OUT)   :: TH02
      REAL,DIMENSION(IMS:IME,JMS:JME),        INTENT(OUT)   :: TSHLTR
@@ -4681,8 +4513,6 @@ CONTAINS
      REAL, DIMENSION( ims:ime, jms:jme ) :: ct_sea
      REAL, DIMENSION( ims:ime, jms:jme ) :: u10_sea
      REAL, DIMENSION( ims:ime, jms:jme ) :: v10_sea
-     REAL, DIMENSION( ims:ime, jms:jme ) :: u10e_sea
-     REAL, DIMENSION( ims:ime, jms:jme ) :: v10e_sea
      REAL, DIMENSION( ims:ime, jms:jme ) :: t02_sea
      REAL, DIMENSION( ims:ime, jms:jme ) :: th02_sea
      REAL, DIMENSION( ims:ime, jms:jme ) :: tshltr_sea
@@ -4820,7 +4650,6 @@ CONTAINS
           &        QGH, CPM, CT, U10, V10,T02,TH02,                    &  ! 0,0,0,0,0,0,0
           &        TSHLTR, TH10, Q02,                    &  ! 0,0,0
           &        QSHLTR, Q10, PSHLTR,                            &  ! 0,0,0,
-          &        U10E, V10E,                                     &  ! 0,0,0,
           &        ids,ide, jds,jde, kds,kde,                      &
           &        ims,ime, jms,jme, kms,kme,                      &
           &        its,ite, jts,jte, kts,kte, SCM_FORCE_FLUX    )
@@ -4874,7 +4703,6 @@ CONTAINS
           &        CHS_SEA, CHS2_SEA, CQS2_SEA, HFX_SEA, QFX_SEA, FLX_LH_SEA, FLHC_SEA,        & ! 0,0,0,0,0,0,0,
           &        FLQC_SEA, QGH_SEA, CPM_SEA, CT_SEA, U10_SEA, V10_SEA,T02_SEA,TH02_SEA,   & ! 0,0,0,0,0,0,0,0
           &        TSHLTR_SEA, TH10_SEA, Q02_SEA, QSHLTR_SEA, Q10_SEA, PSHLTR_SEA,             & ! 0,0,0,0,0,0
-          &        U10E, V10E,                                                                 &
           &        ids,ide, jds,jde, kds,kde,                                                  &
           &        ims,ime, jms,jme, kms,kme,                                                  &
           &        its,ite, jts,jte, kts,kte, SCM_FORCE_FLUX    )
@@ -4910,8 +4738,6 @@ CONTAINS
               T02(i,j)    = T02(i,j)    * XICE(i,j) + (1.0-XICE(i,j)) * T02_SEA(i,j)
               U10(i,j)    = U10(i,j)    * XICE(i,j) + (1.0-XICE(i,j)) * U10_SEA(i,j)
               V10(i,j)    = V10(i,j)    * XICE(i,j) + (1.0-XICE(i,j)) * V10_SEA(i,j)
-              U10E(i,j)   = U10(i,j)
-              V10E(i,j)   = V10(i,j)
 
               ! INTENT(INOUT):  updated by QNSESFC
               ! QSFC:  wait
@@ -4938,89 +4764,110 @@ CONTAINS
 
 !-------------------------------------------------------------------------
 
-   SUBROUTINE mynn_seaice_wrapper(U3D,V3D,T3D,QV3D,                &
-              P3D,dz8w,CP,G,ROVCP,R,XLV,PSFC,CHS,CHS2,CQS2,CPM,    &
-              ZNT,UST,PBLH,MAVAIL,ZOL,MOL,REGIME,PSIM,PSIH,        &
-              XLAND,HFX,QFX,LH,TSK,FLHC,FLQC,QGH,QSFC,RMOL,        &
-              U10,V10,TH2,T2,Q2,SNOWH,                             &
-              GZ1OZ0,WSPD,BR,ISFFLX,DX,                            &
-              SVP1,SVP2,SVP3,SVPT0,EP1,EP2,KARMAN,                 &
-              &itimestep,ch,th3d,pi3d,qc3d,rho,qcg,                &
-              &spp_pbl,pattern_spp_pbl,                            &
-              XICE,SST,TSK_SEA,                                    &
-              CHS2_SEA,CHS_SEA,CPM_SEA,CQS2_SEA,FLHC_SEA,FLQC_SEA, &
-              HFX_SEA,LH_SEA,QFX_SEA,QGH_SEA,QSFC_SEA,ZNT_SEA,     &
-              TICE2TSK_IF2COLD,XICE_THRESHOLD,                     &
-              ids,ide, jds,jde, kds,kde,                           &
-              ims,ime, jms,jme, kms,kme,                           &
-              its,ite, jts,jte, kts,kte,                           &
-              ustm,ck,cka,cd,cda,isftcflx,iz0tlnd                  )
+   SUBROUTINE mynn_seaice_wrapper(U3D,V3D,T3D,QV3D,P3D,dz8w,     &
+                     CP,G,ROVCP,R,XLV,PSFC,CHS,CHS2,CQS2,CPM,      &
+                     ZNT,UST,PBLH,MAVAIL,ZOL,MOL,REGIME,PSIM,PSIH, &
+                     XLAND,HFX,QFX,LH,TSK,FLHC,FLQC,QGH,QSFC,RMOL, &
+                     U10,V10,TH2,T2,Q2,SNOWH,                      &
+                     GZ1OZ0,WSPD,BR,ISFFLX,DX,                     &
+                     SVP1,SVP2,SVP3,SVPT0,EP1,EP2,KARMAN,          &
+               &itimestep,ch,th3d,pi3d,qc3d,rho,                   &
+               &tsq,qsq,cov,Sh3d,el_pbl,qcg,                       &
+               &icloud_bl,qc_bl,cldfra_bl,                         &
+               &spp_pbl,pattern_spp_pbl,                           &
+XICE,SST,TSK_SEA,                                                  &
+CHS2_SEA,CHS_SEA,CPM_SEA,CQS2_SEA,FLHC_SEA,FLQC_SEA,               &
+HFX_SEA,LH_SEA,QFX_SEA,QGH_SEA,QSFC_SEA,ZNT_SEA,                   &
+TICE2TSK_IF2COLD,XICE_THRESHOLD,                                   &
+                     ids,ide, jds,jde, kds,kde,                    &
+                     ims,ime, jms,jme, kms,kme,                    &
+                     its,ite, jts,jte, kts,kte,                    &
+               ustm,ck,cka,cd,cda,isftcflx,iz0tlnd,bl_mynn_cloudpdf)
 
-     USE module_sf_mynn
-
+     USE module_sf_mynn, ONLY: sfclay_mynn
      implicit none
 
-     INTEGER,  INTENT(IN )   ::       ids,ide, jds,jde, kds,kde,  &
-                                      ims,ime, jms,jme, kms,kme,  &
-                                      its,ite, jts,jte, kts,kte
-     INTEGER,  INTENT(IN )   ::       itimestep, ISFFLX
-     INTEGER,  INTENT(IN ), optional ::  ISFTCFLX, IZ0TLND
-     REAL,     INTENT(IN )   ::       SVP1,SVP2,SVP3,SVPT0
-     REAL,     INTENT(IN )   ::       EP1,EP2,KARMAN,             &
-                                      CP,G,ROVCP,R,XLV,DX
+     INTEGER,  INTENT(IN )   ::        ids,ide, jds,jde, kds,kde,  &
+                                       ims,ime, jms,jme, kms,kme,  &
+                                       its,ite, jts,jte, kts,kte
 
-     INTEGER,  INTENT(IN), optional      ::     spp_pbl
-     REAL,     DIMENSION( ims:ime, kms:kme, jms:jme ),            &
-               INTENT(IN), OPTIONAL      ::   pattern_spp_pbl
+     INTEGER,  INTENT(IN )   ::        ISFFLX,bl_mynn_cloudpdf,icloud_bl
+     REAL,     INTENT(IN )   ::        SVP1,SVP2,SVP3,SVPT0
+     REAL,     INTENT(IN )   ::        EP1,EP2,KARMAN
+
+     INTEGER,  INTENT(IN)      ::     spp_pbl
+     REAL,     DIMENSION( ims:ime, kms:kme, jms:jme )             &
+                             ::   pattern_spp_pbl
 
      REAL,     DIMENSION( ims:ime, kms:kme, jms:jme )           , &
-               INTENT(IN   )   ::                           dz8w, &
-                                                            QV3D, &
+               INTENT(IN   )   ::                           dz8w
+
+     REAL,     DIMENSION( ims:ime, kms:kme, jms:jme )           , &
+               INTENT(IN   )   ::                           QV3D, &
                                                              P3D, &
-                                                             T3D, &
-                                                            QC3D, &
-                                                             U3D, &
-                                                             V3D, &
-                                                   rho,th3d,pi3d
+                                                             T3D,rho
 
      REAL,     DIMENSION( ims:ime, jms:jme )                    , &
                INTENT(IN   )               ::             MAVAIL, &
                                                             PBLH, &
-                                                           XLAND, &
-                                                             QCG, &
-                                                            PSFC, &
-                                                           SNOWH, &
-                                                             TSK
+                                                           XLAND
 
      REAL,     DIMENSION( ims:ime, jms:jme )                    , &
                INTENT(OUT  )               ::                U10, &
                                                              V10, &
                                                              TH2, &
                                                               T2, &
-                                                              Q2
-
+                                                              Q2, &
+                                                            QSFC,SNOWH
      REAL,     DIMENSION( ims:ime, jms:jme )                    , &
                INTENT(INOUT)               ::             REGIME, &
                                                              HFX, &
                                                              QFX, &
                                                               LH, &
-                                                        MOL,RMOL, &
-                                                            QSFC, &
-                                                             QGH, &
-                                                             ZNT, &
+                                                         MOL,RMOL,TSK
+
+     REAL,     DIMENSION( ims:ime, jms:jme )                    , &
+               INTENT(INOUT)   ::                 GZ1OZ0,WSPD,BR, &
+                                                        PSIM,PSIH
+
+     REAL,     DIMENSION( ims:ime, kms:kme, jms:jme )           , &
+               INTENT(IN   )   ::                            U3D, &
+                                                             V3D
+
+     REAL,     DIMENSION( ims:ime, jms:jme )                    , &
+               INTENT(IN   )               ::               PSFC
+
+     REAL,     DIMENSION( ims:ime, jms:jme )                    , &
+               INTENT(INOUT)   ::                            ZNT, &
                                                              ZOL, &
                                                              UST, &
                                                              CPM, &
                                                             CHS2, &
                                                             CQS2, &
-                                                             CHS, &
-                                                              CH, &
-                                                       FLHC,FLQC, &
-                                                  GZ1OZ0,WSPD,BR, &
-                                                       PSIM,PSIH
+                                                             CHS
 
      REAL,     DIMENSION( ims:ime, jms:jme )                    , &
-               INTENT(OUT), OPTIONAL  ::      ck,cka,cd,cda,ustm
+               INTENT(INOUT)   ::                      FLHC,FLQC
+
+     REAL,     DIMENSION( ims:ime, jms:jme )                    , &
+               INTENT(INOUT)   ::                                 &
+                                                              QGH
+
+     REAL,     INTENT(IN   )               ::   CP,G,ROVCP,R,XLV,DX
+! from mynn subroutine
+     INTEGER, INTENT(in) :: itimestep
+     REAL,     DIMENSION( ims:ime, jms:jme ), INTENT(IN) :: qcg
+     REAL,     DIMENSION( ims:ime, jms:jme ), INTENT(INOUT) :: ch
+     REAL, DIMENSION(ims:ime, kms:kme, jms:jme), INTENT(IN) ::     &
+                                                             &QC3D,&
+                            &th3d,pi3d,tsq,qsq,cov,Sh3d,el_pbl,&
+                                              &qc_bl,cldfra_bl
+
+     REAL, OPTIONAL, DIMENSION( ims:ime, jms:jme )              , &
+               INTENT(OUT)     ::                   ck,cka,cd,cda
+     REAL, OPTIONAL, DIMENSION( ims:ime, jms:jme )              , &
+               INTENT(INOUT)   ::                            ustm
+     INTEGER,  OPTIONAL,  INTENT(IN )   ::     ISFTCFLX,IZ0TLND
 
 !--------------------------------------------------------------------
 !    New for wrapper
@@ -5031,7 +4878,7 @@ CONTAINS
                INTENT(IN)               ::      XICE
      REAL,     DIMENSION( ims:ime, jms:jme ),                     &
                INTENT(INOUT)            ::      SST
-     REAL,     DIMENSION( ims:ime, jms:jme ), OPTIONAL,           &
+     REAL,     DIMENSION( ims:ime, jms:jme ),                     &
                INTENT(OUT)              ::      TSK_SEA,          &
                                                 CHS2_SEA,         &
                                                 CHS_SEA,          &
@@ -5050,211 +4897,293 @@ CONTAINS
 !    Local
 !--------------------------------------------------------------------
      INTEGER :: I, J
-     REAL,     DIMENSION( ims:ime, jms:jme ) :: TSK_LOCAL,        &
-                 XLAND_SEA,                                       &
-                 MAVAIL_sea,                                      &
-                 BR_SEA,                        BR_HOLD,          &
+     REAL,     DIMENSION( ims:ime, jms:jme ) :: XLAND_SEA,        &
+                                                MAVAIL_sea,       &
+                                                TSK_LOCAL,        &
+                                                BR_HOLD,          &
+                                                CHS2_HOLD,        &
+                                                CHS_HOLD,         &
+                                                CPM_HOLD,         &
+                                                CQS2_HOLD,        &
                                                 FLHC_HOLD,        &
                                                 FLQC_HOLD,        &
-                 GZ1OZ0_SEA,                    GZ1OZ0_HOLD,      &
+                                                GZ1OZ0_HOLD,      &
                                                 HFX_HOLD,         &
                                                 LH_HOLD,          &
-                 CH_SEA,                                          &
-                 MOL_SEA,                       MOL_HOLD,         &
-                 PSIH_SEA,                      PSIH_HOLD,        &
-                 PSIM_SEA,                      PSIM_HOLD,        &
+                                                MOL_HOLD,         &
+                                                PSIH_HOLD,        &
+                                                PSIM_HOLD,        &
                                                 QFX_HOLD,         &
                                                 QGH_HOLD,         &
-                                                CPM_HOLD,         &
-                 RMOL_SEA,                      RMOL_HOLD,        &
-                 UST_SEA,                       UST_HOLD,         &
-                 WSPD_SEA,                      WSPD_HOLD,        &
+                                                REGIME_HOLD,      &
+                                                RMOL_HOLD,        &
+                                                UST_HOLD,         &
+                                                WSPD_HOLD,        &
                                                 ZNT_HOLD,         &
-                 ZOL_SEA,                       ZOL_HOLD,         &
-                 Q2_SEA,                                          &
-                 T2_SEA,                                          &
-                 TH2_SEA,                                         &
-                 U10_SEA,                                         &
-                 V10_SEA,                                         &
-                 CD_SEA,                                          &
-                 CDA_SEA,                                         &
-                 CK_SEA,                                          &
-                 CKA_SEA,                                         &
-                 USTM_SEA,                      USTM_HOLD
+                                                CH_HOLD,          & ! new
+                                                ZOL_HOLD,         &
+                                                Q2_SEA,           &
+                                                T2_SEA,           &
+                                                TH2_SEA,          &
+                                                U10_SEA,          &
+                                                V10_SEA,          &
+                                                CD_SEA,           &
+                                                CDA_SEA,          &
+                                                CK_SEA,           &
+                                                CKA_SEA,          &
+                                                USTM_SEA
 
+     REAL,     DIMENSION( ims:ime, jms:jme ) ::                   &
+                                                BR_SEA,           &
+                                                GZ1OZ0_SEA,       &
+                                                MOL_SEA,          &
+                                                PSIH_SEA,         &
+                                                PSIM_SEA,         &
+                                                REGIME_SEA,       &
+                                                RMOL_SEA,         &
+                                                UST_SEA,          &
+                                                WSPD_SEA,         &
+                                                CH_SEA,           & ! new
+                                                ZOL_SEA
+! INTENT(IN) to SFCLAY; unchanged by the call
+      ! ISFFLX
+      ! SVP1,SVP2,SVP3,SVPT0
+      ! EP1,EP2,KARMAN,EOMEG,STBOLT
+      ! CP,G,ROVCP,R,XLV,DX
+      ! dz8w
+      ! QV3D
+      ! P3D
+      ! T3D
+      ! MAVAIL
+      ! PBLH
+      ! XLAND
+      ! TSK
+      ! U3D
+      ! V3D
+      ! PSFC
 
     CALL get_local_ice_tsk( ims, ime, jms, jme, its, ite, jts, jte,  &
-                            itimestep, .true., tice2tsk_if2cold,     &
-                            XICE, XICE_THRESHOLD,                    &
-                            SST, TSK, TSK_SEA, TSK_LOCAL )
-
+                             itimestep, .true., tice2tsk_if2cold,     &
+                             XICE, XICE_THRESHOLD,                    &
+                             SST, TSK, TSK_SEA, TSK_LOCAL )
 
 ! DFS 8/25/10 Set TSK to ice value
-!    DO j = JTS , JTE
-!        DO i = ITS , ITE
-!            TSK(i,j) = TSK_LOCAL(i,j)
-!        ENDDO
-!    ENDDO
+    DO j = JTS , JTE
+        DO i = ITS , ITE
+            TSK(i,j) = TSK_LOCAL(i,j)
+        ENDDO
+    ENDDO
 
-! Save the variables before the first call
-! (for land/frozen water) to SFCLAY_mynn.
-     BR_HOLD(its:ite,jts:jte)   = BR(its:ite,jts:jte)
-     CPM_HOLD(its:ite,jts:jte)  = CPM(its:ite,jts:jte)
-     FLHC_HOLD(its:ite,jts:jte) = FLHC(its:ite,jts:jte)
-     FLQC_HOLD(its:ite,jts:jte) = FLQC(its:ite,jts:jte)
-     GZ1OZ0_HOLD(its:ite,jts:jte) = GZ1OZ0(its:ite,jts:jte)
-     HFX_HOLD(its:ite,jts:jte)  = HFX(its:ite,jts:jte)
-     LH_HOLD(its:ite,jts:jte)   = LH(its:ite,jts:jte)
-     MOL_HOLD(its:ite,jts:jte)  = MOL(its:ite,jts:jte)
-     PSIH_HOLD(its:ite,jts:jte) = PSIH(its:ite,jts:jte)
-     PSIM_HOLD(its:ite,jts:jte) = PSIM(its:ite,jts:jte)
-     QFX_HOLD(its:ite,jts:jte)  = QFX(its:ite,jts:jte)
-     QGH_HOLD(its:ite,jts:jte)  = QGH(its:ite,jts:jte)
-     RMOL_HOLD(its:ite,jts:jte) = RMOL(its:ite,jts:jte)
-     UST_HOLD(its:ite,jts:jte)  = UST(its:ite,jts:jte)
-     USTM_HOLD(its:ite,jts:jte) = USTM(its:ite,jts:jte)
-     WSPD_HOLD(its:ite,jts:jte) = WSPD(its:ite,jts:jte)
-     ZNT_HOLD(its:ite,jts:jte)  = ZNT(its:ite,jts:jte)
-     ZOL_HOLD(its:ite,jts:jte)  = ZOL(its:ite,jts:jte)
+! INTENT (INOUT) to SFCLAY:  Save the variables before the first call
+! (for land/frozen water) to SFCLAY, to keep from double-counting the
+! effects of that routine
+     BR_HOLD   = BR
+     CHS2_HOLD = CHS2
+     CHS_HOLD  = CHS
+     CPM_HOLD  = CPM
+     CQS2_HOLD = CQS2
+     FLHC_HOLD = FLHC
+     FLQC_HOLD = FLQC
+     GZ1OZ0_HOLD = GZ1OZ0
+     HFX_HOLD  = HFX
+     LH_HOLD   = LH
+     MOL_HOLD  = MOL
+     PSIH_HOLD = PSIH
+     PSIM_HOLD = PSIM
+     QFX_HOLD  = QFX
+     QGH_HOLD  = QGH
+     REGIME_HOLD = REGIME
+     RMOL_HOLD = RMOL
+     UST_HOLD  = UST
+     WSPD_HOLD = WSPD
+     ZNT_HOLD  = ZNT
+     ZOL_HOLD  = ZOL
+     CH_HOLD   = CH
 
-     ! We'll want to save the ouput
-     ! for weighting after the second call to SFCLAY.
+! INTENT(OUT) from SFCLAY.  Input shouldn't matter, but we'll want to
+! keep things around for weighting after the second call to SFCLAY.
+     ! Q2
+     ! QSFC
+     ! T2
+     ! TH2
+     ! U10
+     ! V10
 
      ! land/frozen-water call
-     CALL SFCLAY_mynn(U3D,V3D,T3D,QV3D,P3D,dz8w,              &
-          CP,G,ROVCP,R,XLV,PSFC,CHS,CHS2,CQS2,CPM,            &
-          ZNT,UST,PBLH,MAVAIL,ZOL,MOL,REGIME,PSIM,PSIH,       &
-          XLAND,HFX,QFX,LH,TSK_LOCAL,FLHC,FLQC,QGH,QSFC,RMOL, &
-          U10,V10,TH2,T2,Q2,SNOWH,                            &
-          GZ1OZ0,WSPD,BR,ISFFLX,DX,                           &
-          SVP1,SVP2,SVP3,SVPT0,EP1,EP2,KARMAN,                &
-          itimestep,ch,th3d,pi3d,qc3d,rho,qcg,                &
-          spp_pbl,pattern_spp_pbl,                            &
-          ids,ide, jds,jde, kds,kde,                          &
-          ims,ime, jms,jme, kms,kme,                          &
-          its,ite, jts,jte, kts,kte,                          &
-          ustm,ck,cka,cd,cda,isftcflx,iz0tlnd                 )
+!     call sfclay(U3D,V3D,T3D,QV3D,P3D,dz8w,                    & ! I
+!                 CP,G,ROVCP,R,XLV,PSFC,CHS,CHS2,CQS2,CPM,      & !
+!                 I,I,I,I,I,I,IO,IO,IO,IO,
+!                 ZNT,UST,PBLH,MAVAIL,ZOL,MOL,REGIME,PSIM,PSIH, &
+!                 XLAND,HFX,QFX,LH,TSK_LOCAL,FLHC,FLQC,QGH,QSFC,RMOL, &
+!                 U10,V10,TH2,T2,Q2,                            &
+!                 GZ1OZ0,WSPD,BR,ISFFLX,DX,                     &
+!                 SVP1,SVP2,SVP3,SVPT0,EP1,EP2,                 &
+!                 KARMAN,EOMEG,STBOLT,                          &
+!                 P1000,                                      &
+!                 ids,ide, jds,jde, kds,kde,                    &
+!                 ims,ime, jms,jme, kms,kme,                    &
+!                 its,ite, jts,jte, kts,kte,                    &
+!                 ustm,ck,cka,cd,cda,isftcflx,iz0tlnd           )
 
+          CALL SFCLAY_mynn(U3D,V3D,T3D,QV3D,P3D,dz8w,              &
+               CP,G,ROVCP,R,XLV,PSFC,CHS,CHS2,CQS2,CPM,            &
+               ZNT,UST,PBLH,MAVAIL,ZOL,MOL,REGIME,PSIM,PSIH,       &
+               XLAND,HFX,QFX,LH,TSK_LOCAL,FLHC,FLQC,QGH,QSFC,RMOL, &
+               U10,V10,TH2,T2,Q2,SNOWH,                            &
+               GZ1OZ0,WSPD,BR,ISFFLX,DX,                           &
+               SVP1,SVP2,SVP3,SVPT0,EP1,EP2,KARMAN,                &
+               &itimestep,ch,th3d,pi3d,qc3d,rho,                   &
+               &tsq,qsq,cov,sh3d,el_pbl,qcg,                       &
+               &icloud_bl,qc_bl,cldfra_bl,                         &
+               &spp_pbl,pattern_spp_pbl,                           &
+               ids,ide, jds,jde, kds,kde,                          &
+               ims,ime, jms,jme, kms,kme,                          &
+               its,ite, jts,jte, kts,kte,                          &
+               ustm,ck,cka,cd,cda,isftcflx,iz0tlnd,bl_mynn_cloudpdf)
 
-     ! Set up lower boundary conditions to force an open-water call
-      DO j = JTS , JTE
+     ! Set up for open-water call
+     DO j = JTS , JTE
         DO i = ITS , ITE
-           IF ( ( XICE(i,j) .GE. XICE_THRESHOLD ) .and. ( XICE(i,j) .LE. 1.0 ) ) THEN
-              XLAND_SEA(i,j) = 2. !water
-              MAVAIL_SEA(i,j)= 1.
-              ZNT_SEA(i,j)   = 0.0001 !will be recalculated anyway
-              TSK_SEA(i,j)   = SST(i,j)
+           IF ( ( XICE(I,J) .GE. XICE_THRESHOLD ) .and. ( XICE(i,j) .LE. 1.0 ) ) THEN
+              XLAND_SEA(i,j)=2.
+              MAVAIL_SEA(I,J)  =1.
+              ZNT_SEA(I,J) = 0.0001
+              TSK_SEA(i,j) = SST(i,j)
               IF ( SST(i,j) .LT. 271.4 ) THEN
-                 SST(i,j)    = 271.4
-                 TSK_SEA(i,j)= SST(i,j)
+                 SST(i,j) = 271.4
+                 TSK_SEA(i,j) = SST(i,j)
               ENDIF
-              QSFC_SEA(i,j)  = QSFC(i,j) !will be recalculated anyway
            ELSE
-              !keep original values
               XLAND_SEA(i,j) = XLAND(i,j)
-              MAVAIL_SEA(i,j)= MAVAIL(i,j)
-              ZNT_SEA(i,j)   = ZNT_HOLD(i,j)
-              TSK_SEA(i,j)   = TSK_LOCAL(i,j)
-              QSFC_SEA(i,j)  = QSFC(i,j)
+              MAVAIL_SEA(i,j) = MAVAIL(i,j)
+              ZNT_SEA(i,j)  = ZNT_HOLD(i,j)
+              TSK_SEA(i,j) = TSK_LOCAL(i,j)
            ENDIF
         ENDDO
      ENDDO
 
      ! Restore the values from before the land/frozen-water call
-     BR_SEA(its:ite,jts:jte)   = BR_HOLD(its:ite,jts:jte)
-     CPM_SEA(its:ite,jts:jte)  = CPM_HOLD(its:ite,jts:jte)
-     FLHC_SEA(its:ite,jts:jte) = FLHC_HOLD(its:ite,jts:jte)
-     FLQC_SEA(its:ite,jts:jte) = FLQC_HOLD(its:ite,jts:jte)
-     GZ1OZ0_SEA(its:ite,jts:jte) = GZ1OZ0_HOLD(its:ite,jts:jte)
-     HFX_SEA(its:ite,jts:jte)  = HFX_HOLD(its:ite,jts:jte)
-     LH_SEA(its:ite,jts:jte)   = LH_HOLD(its:ite,jts:jte)
-     MOL_SEA(its:ite,jts:jte)  = MOL_HOLD(its:ite,jts:jte)
-     PSIH_SEA(its:ite,jts:jte) = PSIH_HOLD(its:ite,jts:jte)
-     PSIM_SEA(its:ite,jts:jte) = PSIM_HOLD(its:ite,jts:jte)
-     QFX_SEA(its:ite,jts:jte)  = QFX_HOLD(its:ite,jts:jte)
-     QGH_SEA(its:ite,jts:jte)  = QGH_HOLD(its:ite,jts:jte)
-     RMOL_SEA(its:ite,jts:jte) = RMOL_HOLD(its:ite,jts:jte)
-     UST_SEA(its:ite,jts:jte)  = UST_HOLD(its:ite,jts:jte)
-     USTM_SEA(its:ite,jts:jte) = USTM_HOLD(its:ite,jts:jte)
-     WSPD_SEA(its:ite,jts:jte) = WSPD_HOLD(its:ite,jts:jte)
-     ZOL_SEA(its:ite,jts:jte)  = ZOL_HOLD(its:ite,jts:jte)
-
+     BR_SEA   = BR_HOLD
+     CHS2_SEA = CHS2_HOLD
+     CHS_SEA  = CHS_HOLD
+     CPM_SEA  = CPM_HOLD
+     CQS2_SEA = CQS2_HOLD
+     FLHC_SEA = FLHC_HOLD
+     FLQC_SEA = FLQC_HOLD
+     GZ1OZ0_SEA = GZ1OZ0_HOLD
+     HFX_SEA  = HFX_HOLD
+     LH_SEA   = LH_HOLD
+     MOL_SEA  = MOL_HOLD
+     PSIH_SEA = PSIH_HOLD
+     PSIM_SEA = PSIM_HOLD
+     QFX_SEA  = QFX_HOLD
+     QGH_SEA  = QGH_HOLD
+     REGIME_SEA = REGIME_HOLD
+     RMOL_SEA = RMOL_HOLD
+     UST_SEA  = UST_HOLD
+     WSPD_SEA = WSPD_HOLD
+     ZOL_SEA  = ZOL_HOLD
+     CH_SEA   = CH_HOLD
 
      ! open-water call
+!     call sfclay(U3D,V3D,T3D,QV3D,P3D,dz8w,                    & ! I
+!                 CP,G,ROVCP,R,XLV,PSFC,                        & ! I
+!                 CHS_SEA,CHS2_SEA,CQS2_SEA,CPM_SEA,            & ! I/O
+!                 ZNT_SEA,UST_SEA,                              & ! I/O
+!                 PBLH,MAVAIL_SEA,                              & ! I
+!                 ZOL_SEA,MOL_SEA,REGIME_SEA,PSIM_SEA,PSIH_SEA, & ! I/O
+!                 XLAND_SEA,                              & ! I
+!                 HFX_SEA,QFX_SEA,LH_SEA,                       & ! I/O
+!                 TSK_SEA,                                      & ! I
+!                 FLHC_SEA,FLQC_SEA,QGH_SEA,QSFC_sea,RMOL_SEA,  & ! I/O
+!                 U10_sea,V10_sea,TH2_sea,T2_sea,Q2_sea,        & ! O
+!                 GZ1OZ0_SEA,WSPD_SEA,BR_SEA,                   & ! I/O
+!                 ISFFLX,DX,                                    &
+!                 SVP1,SVP2,SVP3,SVPT0,EP1,EP2,                 &
+!                 KARMAN,EOMEG,STBOLT,
+!                 P1000,                                      &
+!                 ids,ide, jds,jde, kds,kde,                    &
+!                 ims,ime, jms,jme, kms,kme,                    &
+!                 its,ite, jts,jte, kts,kte,                    & ! 0
+!                 ustm_sea,ck_sea,cka_sea,cd_sea,cda_sea,isftcflx,iz0tlnd )
           CALL SFCLAY_mynn(U3D,V3D,T3D,QV3D,P3D,dz8w,              &
                CP,G,ROVCP,R,XLV,PSFC,                              &
                CHS_SEA,CHS2_SEA,CQS2_SEA,CPM_SEA,                  &
                ZNT_SEA,UST_SEA,                                    &
                PBLH,MAVAIL_SEA,                                    &
-               ZOL_SEA,MOL_SEA,REGIME,PSIM_SEA,PSIH_SEA,           &
+               ZOL_SEA,MOL_SEA,REGIME_SEA,PSIM_SEA,PSIH_SEA,       &
                XLAND_SEA,                                          &
                HFX_SEA,QFX_SEA,LH_SEA,                             &
                TSK_SEA,                                            &
-               FLHC_SEA,FLQC_SEA,QGH_SEA,QSFC_SEA,RMOL_SEA,        &
-               U10_SEA,V10_SEA,TH2_SEA,T2_SEA,Q2_SEA,SNOWH,        &
+               FLHC_SEA,FLQC_SEA,QGH_SEA,QSFC_sea,RMOL_SEA,        &
+               U10_sea,V10_sea,TH2_sea,T2_sea,Q2_sea,SNOWH,        &
                GZ1OZ0_SEA,WSPD_SEA,BR_SEA,                         &
                ISFFLX,DX,                                          &
                SVP1,SVP2,SVP3,SVPT0,EP1,EP2,KARMAN,                &
-               &itimestep,CH_SEA,th3d,pi3d,qc3d,rho,qcg,           &
+               &itimestep,CH_SEA,th3d,pi3d,qc3d,rho,               &
+               &tsq,qsq,cov,sh3d,el_pbl,qcg,                       &
+               &icloud_bl,qc_bl,cldfra_bl,                         &
                &spp_pbl,pattern_spp_pbl,                           &
                ids,ide, jds,jde, kds,kde,                          &
                ims,ime, jms,jme, kms,kme,                          &
                its,ite, jts,jte, kts,kte,                          &
                ustm_sea,ck_sea,cka_sea,cd_sea,cda_sea,isftcflx,    &
-               iz0tlnd                                             )
+               iz0tlnd,bl_mynn_cloudpdf )
 
      DO j = JTS , JTE
         DO i = ITS, ITE
            IF ( ( XICE(I,J) .GE. XICE_THRESHOLD )  .and.( XICE(i,j) .LE. 1.0 ) ) THEN
               ! weighted average for sea ice points
-              br(i,j)     = br(i,j)     * XICE(i,j) + (1.0-XICE(i,j)) * br_sea(i,j)
+              br(i,j)     = ( br(i,j)     * XICE(i,j) ) + ( (1.0-XICE(i,j)) * br_sea(i,j)     )
               ! CHS2 -- wait
               ! CHS  -- wait
               ! CPM  -- wait
               ! CQS2 -- wait
-              !FLHC(i,j)   = FLHC(i,j)   * XICE(i,j) + (1.0-XICE(i,j)) * FLHC_SEA (i,j)
-              !FLQC(i,j)   = FLQC(i,j)   * XICE(i,j) + (1.0-XICE(i,j)) * FLQC_SEA (i,j)
-              gz1oz0(i,j) = gz1oz0(i,j) * XICE(i,j) + (1.0-XICE(i,j)) * gz1oz0_sea(i,j)
+              ! FLHC -- wait
+              ! FLQC -- wait
+              gz1oz0(i,j) = ( gz1oz0(i,j) * XICE(i,j) ) + ( (1.0-XICE(i,j)) * gz1oz0_sea(i,j) )
               ! HFX  -- wait
               ! LH   -- wait
-              mol(i,j)    = mol(i,j)    * XICE(i,j) + (1.0-XICE(i,j)) * mol_sea(i,j)
-              psih(i,j)   = psih(i,j)   * XICE(i,j) + (1.0-XICE(i,j)) * psih_sea(i,j)
-              psim(i,j)   = psim(i,j)   * XICE(i,j) + (1.0-XICE(i,j)) * psim_sea(i,j)
+              mol(i,j)    = ( mol(i,j)    * XICE(i,j) ) + ( (1.0-XICE(i,j)) * mol_sea(i,j)    )
+              psih(i,j)   = ( psih(i,j)   * XICE(i,j) ) + ( (1.0-XICE(i,j)) * psih_sea(i,j)   )
+              psim(i,j)   = ( psim(i,j)   * XICE(i,j) ) + ( (1.0-XICE(i,j)) * psim_sea(i,j)   )
               ! QFX  -- wait
               ! QGH  -- wait
-              rmol(i,j)   = rmol(i,j)   * XICE(i,j) + (1.0-XICE(i,j)) * rmol_sea(i,j)
-              ust(i,j)    = ust(i,j)    * XICE(i,j) + (1.0-XICE(i,j)) * ust_sea(i,j)
-              wspd(i,j)   = wspd(i,j)   * XICE(i,j) + (1.0-XICE(i,j)) * wspd_sea(i,j)
-              zol(i,j)    = zol(i,j)    * XICE(i,j) + (1.0-XICE(i,j)) * zol_sea(i,j)
-              ch(i,j)     = ch(i,j)     * XICE(i,j) + (1.0-XICE(i,j)) * ch_sea(i,j)
+              if ( XICE(i,j).GE. 0.5 ) regime(i,j) = regime_hold(i,j)
+              rmol(i,j)   = ( rmol(i,j)   * XICE(i,j) ) + ( (1.0-XICE(i,j)) * rmol_sea(i,j)   )
+              ust(i,j)    = ( ust(i,j)    * XICE(i,j) ) + ( (1.0-XICE(i,j)) * ust_sea(i,j)    )
+              wspd(i,j)   = ( wspd(i,j)   * XICE(i,j) ) + ( (1.0-XICE(i,j)) * wspd_sea(i,j)   )
+              zol(i,j)    = ( zol(i,j)    * XICE(i,j) ) + ( (1.0-XICE(i,j)) * zol_sea(i,j)    )
+              ch(i,j)     = ( ch(i,j)     * XICE(i,j) ) + ( (1.0-XICE(i,j)) * ch_sea(i,j)    )
               ! INTENT(OUT)
               ! --------------------------------------------------------------------
               IF ( PRESENT ( CD ) ) THEN
-                 CD(i,j)  = CD(i,j)  * XICE(i,j) + (1.0-XICE(i,j)) * CD_sea(i,j)
+                 CD(i,j)  = ( CD(i,j)  * XICE(i,j) ) + ( (1.0-XICE(i,j)) * CD_sea(i,j)    )
               ENDIF
               IF ( PRESENT ( CDA ) ) THEN
-                 CDA(i,j) = CDA(i,j) * XICE(i,j) + (1.0-XICE(i,j)) * CDA_sea(i,j)
+                 CDA(i,j) = ( CDA(i,j) * XICE(i,j) ) + ( (1.0-XICE(i,j)) * CDA_sea(i,j)   )
               ENDIF
               IF ( PRESENT ( CK ) ) THEN
-                 CK(i,j)  = CK(i,j)  * XICE(i,j) + (1.0-XICE(i,j)) * CK_sea(i,j)
+                 CK(i,j)  = ( CK(i,j)  * XICE(i,j) ) + ( (1.0-XICE(i,j)) * CK_sea(i,j)    )
               ENDIF
               IF ( PRESENT ( CKA ) ) THEN
-                 CKA(i,j) = CKA(i,j) * XICE(i,j) + (1.0-XICE(i,j)) * CKA_sea(i,j)
+                 CKA(i,j) = ( CKA(i,j) * XICE(i,j) ) + ( (1.0-XICE(i,j)) * CKA_sea(i,j)   )
               ENDIF
-              q2(i,j)     = q2(i,j)  * XICE(i,j) + (1.0-XICE(i,j)) * q2_sea(i,j)
+              q2(i,j)     = ( q2(i,j)     * XICE(i,j) ) + ( (1.0-XICE(i,j)) * q2_sea(i,j)     )
               ! QSFC -- wait
-              t2(i,j)     = t2(i,j)  * XICE(i,j) + (1.0-XICE(i,j)) * t2_sea(i,j)
-              th2(i,j)    = th2(i,j) * XICE(i,j) + (1.0-XICE(i,j)) * th2_sea(i,j)
-              u10(i,j)    = u10(i,j) * XICE(i,j) + (1.0-XICE(i,j)) * u10_sea(i,j)
+              t2(i,j)     = ( t2(i,j)     * XICE(i,j) ) + ( (1.0-XICE(i,j)) * t2_sea(i,j)     )
+              th2(i,j)    = ( th2(i,j)    * XICE(i,j) ) + ( (1.0-XICE(i,j)) * th2_sea(i,j)    )
+              u10(i,j)    = ( u10(i,j)    * XICE(i,j) ) + ( (1.0-XICE(i,j)) * u10_sea(i,j)    )
               IF ( PRESENT ( USTM ) ) THEN
-                 USTM(i,j)= USTM(i,j)* XICE(i,j) + (1.0-XICE(i,j)) * USTM_sea(i,j)
+                 USTM(i,j) = ( USTM(i,j)  * XICE(i,j) ) + ( (1.0-XICE(i,j)) * USTM_sea(i,j)   )
               ENDIF
-              v10(i,j)    = v10(i,j) * XICE(i,j) + (1.0-XICE(i,j)) * v10_sea(i,j)
+              v10(i,j)    = ( v10(i,j)    * XICE(i,j) ) + ( (1.0-XICE(i,j)) * v10_sea(i,j)    )
            ENDIF
         END DO
-      END DO
-
-
+     END DO
+!
+!         tsk(i,j) = tsk(i,j)*XICE(i,j) + (1.0-XICE(i,j))*TSK_SEA(i,j)
+!
    END SUBROUTINE mynn_seaice_wrapper
 
 !-------------------------------------------------------------------------
@@ -5940,7 +5869,7 @@ CONTAINS
                      GZ1OZ0,WSPD,BR,ISFFLX,DX,                     &
                      SVP1,SVP2,SVP3,SVPT0,EP1,EP2,                 &
                      KARMAN,EOMEG,STBOLT,                          &
-                     P1000,                                        &
+                     P1000,                                      &
 XICE,SST,TSK_SEA,                                                  &
 CHS2_SEA,CHS_SEA,CPM_SEA,CQS2_SEA,FLHC_SEA,FLQC_SEA,               &
 HFX_SEA,LH_SEA,QFX_SEA,QGH_SEA,QSFC_SEA,ZNT_SEA,                   &
@@ -6017,9 +5946,7 @@ ITIMESTEP,TICE2TSK_IF2COLD,XICE_THRESHOLD,                         &
                INTENT(INOUT)   ::                                 &
                                                               QGH
 
-     REAL,     INTENT(IN   )               ::   CP,G,ROVCP,R,XLV
-     REAL,     DIMENSION( ims:ime, jms:jme )                    , &
-               INTENT(IN) ::   DX
+     REAL,     INTENT(IN   )               ::   CP,G,ROVCP,R,XLV,DX
 
      REAL, OPTIONAL, DIMENSION( ims:ime, jms:jme )              , &
                INTENT(OUT)     ::                   ck,cka,cd,cda
@@ -6198,7 +6125,7 @@ ITIMESTEP,TICE2TSK_IF2COLD,XICE_THRESHOLD,                         &
                  GZ1OZ0,WSPD,BR,ISFFLX,DX,                     &
                  SVP1,SVP2,SVP3,SVPT0,EP1,EP2,                 &
                  KARMAN,EOMEG,STBOLT,                          &
-                 P1000,                                        &
+                 P1000,                                      &
                  ids,ide, jds,jde, kds,kde,                    &
                  ims,ime, jms,jme, kms,kme,                    &
                  its,ite, jts,jte, kts,kte,                    &

@@ -1,26 +1,4 @@
-!  Program Name:
-!  Author(s)/Contact(s):
-!  Abstract:
-!  History Log:
-! 
-!  Usage:
-!  Parameters: <Specify typical arguments passed>
-!  Input Files:
-!        <list file names and briefly describe the data they include>
-!  Output Files:
-!        <list file names and briefly describe the information they include>
-! 
-!  Condition codes:
-!        <list exit condition or error codes returned >
-!        If appropriate, descriptive troubleshooting instructions or
-!        likely causes for failures could be mentioned here with the
-!        appropriate error code
-! 
-!  User controllable options: <if applicable>
-
 MODULE MODULE_SF_NOAHMPLSM
-
-  use module_sf_gecros, only : gecros
 
   IMPLICIT NONE
 
@@ -158,20 +136,6 @@ MODULE MODULE_SF_NOAHMPLSM
                       !   3 -> adjusted Sellers to decrease RSURF for wet soil
 		      !   4 -> option 1 for non-snow; rsurf = rsurf_snow for snow (set in MPTABLE); AD v3.8
 
-  INTEGER :: OPT_SOIL ! options for defining soil properties
-                      ! **1 -> use input dominant soil texture
-		      !   2 -> use input soil texture that varies with depth
-                      !   3 -> use soil composition (sand, clay, orgm) and pedotransfer functions (OPT_PEDO)
-		      !   4 -> use input soil properties (BEXP_3D, SMCMAX_3D, etc.)
-
-  INTEGER :: OPT_PEDO ! options for pedotransfer functions (used when OPT_SOIL = 3)
-                      ! **1 -> Saxton and Rawls (2006)
-
-  INTEGER :: OPT_CROP ! options for crop model
-                      ! **0 -> No crop model, will run default dynamic vegetation
-                      !   1 -> Liu, et al. 2016
-		      !   2 -> Gecros (Genotype-by-Environment interaction on CROp growth Simulator) Yin and van Laar, 2005
-
 !------------------------------------------------------------------------------------------!
 ! Physical Constants:                                                                      !
 !------------------------------------------------------------------------------------------!
@@ -197,6 +161,9 @@ MODULE MODULE_SF_NOAHMPLSM
   INTEGER, PRIVATE, PARAMETER :: MBAND = 2
   INTEGER, PRIVATE, PARAMETER :: NSOIL = 4
   INTEGER, PRIVATE, PARAMETER :: NSTAGE = 8
+
+  logical :: calculate_soil
+  integer :: soil_update_steps
 
   TYPE noahmp_parameters ! define a NoahMP parameters type
 
@@ -292,19 +259,7 @@ MODULE MODULE_SF_NOAHMPLSM
      REAL :: Z0SNO        !snow surface roughness length (m) (0.002)
      REAL :: SSI          !liquid water holding capacity for snowpack (m3/m3)
      REAL :: SWEMX        !new snow mass to fully cover old snow (mm)
-     REAL :: TAU0         !tau0 from Yang97 eqn. 10a
-     REAL :: GRAIN_GROWTH !growth from vapor diffusion Yang97 eqn. 10b
-     REAL :: EXTRA_GROWTH !extra growth near freezing Yang97 eqn. 10c
-     REAL :: DIRT_SOOT    !dirt and soot term Yang97 eqn. 10d
-     REAL :: BATS_COSZ    !zenith angle snow albedo adjustment; b in Yang97 eqn. 15
-     REAL :: BATS_VIS_NEW !new snow visible albedo
-     REAL :: BATS_NIR_NEW !new snow NIR albedo
-     REAL :: BATS_VIS_AGE !age factor for diffuse visible snow albedo Yang97 eqn. 17
-     REAL :: BATS_NIR_AGE !age factor for diffuse NIR snow albedo Yang97 eqn. 18
-     REAL :: BATS_VIS_DIR !cosz factor for direct visible snow albedo Yang97 eqn. 15
-     REAL :: BATS_NIR_DIR !cosz factor for direct NIR snow albedo Yang97 eqn. 16
      REAL :: RSURF_SNOW   !surface resistance for snow(s/m)
-     REAL :: RSURF_EXP    !exponent in the shape parameter for soil resistance option 1
 
 !------------------------------------------------------------------------------------------!
 ! From the crop section of MPTABLE.TBL
@@ -400,7 +355,6 @@ contains
                    CM      , CH      , TAUSS   ,                               & ! IN/OUT : 
                    GRAIN   , GDD     , PGS     ,                               & ! IN/OUT 
                    SMCWTD  ,DEEPRECH , RECH    ,                               & ! IN/OUT :
-                   GECROS1D,                                                   & ! IN/OUT :
 		   Z0WRF   , &
                    FSA     , FSR     , FIRA    , FSH     , SSOIL   , FCEV    , & ! OUT : 
                    FGEV    , FCTR    , ECAN    , ETRAN   , EDIR    , TRAD    , & ! OUT :
@@ -408,12 +362,15 @@ contains
                    RUNSRF  , RUNSUB  , APAR    , PSN     , SAV     , SAG     , & ! OUT :
                    FSNO    , NEE     , GPP     , NPP     , FVEG    , ALBEDO  , & ! OUT :
                    QSNBOT  , PONDING , PONDING1, PONDING2, RSSUN   , RSSHA   , & ! OUT :
-		   ALBSND  , ALBSNI  ,                                         & ! OUT :
                    BGAP    , WGAP    , CHV     , CHB     , EMISSI  ,           & ! OUT :
 		   SHG     , SHC     , SHB     , EVG     , EVB     , GHV     , & ! OUT :
 		   GHB     , IRG     , IRC     , IRB     , TR      , EVC     , & ! OUT :
 		   CHLEAF  , CHUC    , CHV2    , CHB2    , FPICE   , PAHV    , &
-                   PAHG    , PAHB    , PAH     , LAISUN  , LAISHA  , RB        & ! OUT
+                   PAHG    , PAHB    , PAH     ,                               &
+                   QINTS   , QINTR   , QDRIPS  , QDRIPR  , QTHROS  , QTHROR  , & ! OUT :
+	           QSNSUB  , QSNFRO  , QSUBC   , QFROC   , QFRZC   , QMELTC  , & ! OUT :
+	           QEVAC,QDEWC,ICG, IGC, SCG, SGC,RAIN,SNOW, &
+	           acc_ssoil, acc_qinsur, acc_qseva, acc_etrani, hcpct, eflxb &
 #ifdef WRF_HYDRO
                    ,SFCHEADRT                                                  & ! IN/OUT :
 #endif
@@ -422,7 +379,6 @@ contains
 ! --------------------------------------------------------------------------------------------------
 ! Initial code: Guo-Yue Niu, Oct. 2007
 ! --------------------------------------------------------------------------------------------------
-
   implicit none
 ! --------------------------------------------------------------------------------------------------
 ! input
@@ -507,9 +463,13 @@ contains
   REAL,                            INTENT(INOUT) :: SMCWTD !soil water content between bottom of the soil and water table [m3/m3]
   REAL,                            INTENT(INOUT) :: DEEPRECH !recharge to or from the water table when deep [m]
   REAL,                            INTENT(INOUT) :: RECH !recharge to or from the water table when shallow [m] (diagnostic)
+  REAL                           , INTENT(INOUT) :: ACC_SSOIL  !ground heat flux (w/m2)   [+ to soil]
+  REAL                           , INTENT(INOUT) :: ACC_QINSUR  !water input on soil surface [m/s]
+  REAL                           , INTENT(INOUT) :: ACC_QSEVA   !soil surface evap rate [mm/s]
+  REAL, DIMENSION(       1:NSOIL), INTENT(INOUT) :: ACC_ETRANI  !transpiration rate (mm/s) [+]
+  REAL, DIMENSION(-NSNOW+1:NSOIL), INTENT(  OUT) :: HCPCT  !heat capacity [j/m3/k]
+  REAL                           , INTENT(  OUT) :: EFLXB !energy influx from soil bottom (w/m2)
 
-  REAL, DIMENSION(1:60)          , INTENT(INOUT) :: gecros1d !  gecros crop
-  
 ! output
   REAL                           , INTENT(OUT)   :: Z0WRF  !combined z0 sent to coupled model
   REAL                           , INTENT(OUT)   :: FSA    !total absorbed solar radiation (w/m2)
@@ -539,9 +499,6 @@ contains
   REAL                           , INTENT(OUT)   :: PONDING!surface ponding [mm]
   REAL                           , INTENT(OUT)   :: PONDING1!surface ponding [mm]
   REAL                           , INTENT(OUT)   :: PONDING2!surface ponding [mm]
-  REAL                           , INTENT(OUT)   :: RB        ! leaf boundary layer resistance (s/m)
-  REAL                           , INTENT(OUT)   :: LAISUN    ! sunlit leaf area index (m2/m2)
-  REAL                           , INTENT(OUT)   :: LAISHA    ! shaded leaf area index (m2/m2)
 
 !jref:start; output
   REAL                           , INTENT(OUT)     :: T2MV   !2-m air temperature over vegetated part [k]
@@ -550,8 +507,6 @@ contains
   REAL, INTENT(OUT) :: RSSHA        !shaded leaf stomatal resistance (s/m)
   REAL, INTENT(OUT) :: BGAP
   REAL, INTENT(OUT) :: WGAP
-  REAL, DIMENSION(1:2)              , INTENT(OUT)   :: ALBSND   !snow albedo (direct)
-  REAL, DIMENSION(1:2)              , INTENT(OUT)   :: ALBSNI   !snow albedo (diffuse)
   REAL, INTENT(OUT) :: TGV
   REAL, INTENT(OUT) :: TGB
   REAL              :: Q1
@@ -612,6 +567,24 @@ contains
   REAL, INTENT(OUT)   :: PAHG    !precipitation advected heat - under canopy net (W/m2)
   REAL, INTENT(OUT)   :: PAHB    !precipitation advected heat - bare ground net (W/m2)
   REAL, INTENT(OUT)                                           :: PAH     !precipitation advected heat - total (W/m2)
+  REAL, INTENT(OUT)   :: QINTS
+  REAL, INTENT(OUT)   :: QINTR
+  REAL, INTENT(OUT)   :: QDRIPS
+  REAL, INTENT(OUT)   :: QDRIPR
+  REAL, INTENT(OUT)   :: QTHROS
+  REAL, INTENT(OUT)   :: QTHROR
+  REAL, INTENT(OUT)   :: QSNSUB
+  REAL, INTENT(OUT)   :: QSNFRO
+  REAL, INTENT(OUT)   :: QSUBC
+  REAL, INTENT(OUT)   :: QFROC
+  REAL, INTENT(OUT)   :: QFRZC
+  REAL, INTENT(OUT)   :: QMELTC
+  REAL, INTENT(OUT)   :: QEVAC
+  REAL, INTENT(OUT)   :: QDEWC
+  REAL                              , INTENT(OUT)   :: ICG    !canopy to ground [w/m2] [+ to atm]
+  REAL                              , INTENT(OUT)   :: IGC    !ground to canopy [w/m2] [+ to atm]
+  REAL                              , INTENT(OUT)   :: SCG    !canopy to ground [w/m2] [+ to atm]
+  REAL                              , INTENT(OUT)   :: SGC    !ground to canopy [w/m2] [+ to atm]
 
 !jref:start 
   REAL                                           :: FSRV
@@ -659,22 +632,18 @@ contains
   REAL                                           :: FP                                            ! MB/AN: v3.7
   REAL                                           :: PRCP                                          ! MB/AN: v3.7
 !more local variables for precip heat MB
-  REAL                                           :: QINTR   !interception rate for rain (mm/s)
-  REAL                                           :: QDRIPR  !drip rate for rain (mm/s)
-  REAL                                           :: QTHROR  !throughfall for rain (mm/s)
-  REAL                                           :: QINTS   !interception (loading) rate for snowfall (mm/s)
-  REAL                                           :: QDRIPS  !drip (unloading) rate for intercepted snow (mm/s)
-  REAL                                           :: QTHROS  !throughfall of snowfall (mm/s)
+!  REAL                                           :: QINTR   !interception rate for rain (mm/s)
+!  REAL                                           :: QDRIPR  !drip rate for rain (mm/s)
+!  REAL                                           :: QTHROR  !throughfall for rain (mm/s)
+!  REAL                                           :: QINTS   !interception (loading) rate for snowfall (mm/s)
+!  REAL                                           :: QDRIPS  !drip (unloading) rate for intercepted snow (mm/s)
+!  REAL                                           :: QTHROS  !throughfall of snowfall (mm/s)
   REAL                                           :: QRAIN   !rain at ground srf (mm/s) [+]
   REAL                                           :: SNOWHIN !snow depth increasing rate (m/s)
   REAL                                 :: LATHEAV !latent heat vap./sublimation (j/kg)
   REAL                                 :: LATHEAG !latent heat vap./sublimation (j/kg)
   LOGICAL                             :: FROZEN_GROUND ! used to define latent heat pathway
   LOGICAL                             :: FROZEN_CANOPY ! used to define latent heat pathway
-  LOGICAL                             :: dveg_active ! flag to run dynamic vegetation
-  LOGICAL                             :: crop_active ! flag to run crop model
-  
-  REAL :: FB
   
   ! INTENT (OUT) variables need to be assigned a value.  These normally get assigned values
   ! only if DVEG == 2.
@@ -733,16 +702,12 @@ contains
      ELSE IF (DVEG == 2 .or. DVEG == 3 .or. DVEG == 8) THEN
         FVEG = 1.-EXP(-0.52*(LAI+SAI))
         IF(FVEG <= 0.05) FVEG = 0.05
-     ELSE IF (DVEG == 4 .or. DVEG == 5 .or. DVEG == 9) THEN
+     ELSE IF (DVEG == 4 .or. DVEG == 5 .or. DVEG == 9 .or. DVEG == 10) THEN
         FVEG = SHDMAX
         IF(FVEG <= 0.05) FVEG = 0.05
      ELSE
         WRITE(*,*) "-------- FATAL CALLED IN SFLX -----------"
         CALL wrf_error_fatal("Namelist parameter DVEG unknown") 
-     ENDIF
-     IF(OPT_CROP > 0 .and. CROPTYPE > 0) THEN
-        FVEG = SHDMAX
-        IF(FVEG <= 0.05) FVEG = 0.05
      ENDIF
      IF(parameters%urban_flag .OR. VEGTYP == parameters%ISBARREN) FVEG = 0.0
      IF(ELAI+ESAI == 0.0) FVEG = 0.0
@@ -774,15 +739,15 @@ contains
                  TV     ,TG     ,STC    ,SNOWH  ,EAH    ,TAH    , & !inout
                  SNEQVO ,SNEQV  ,SH2O   ,SMC    ,SNICE  ,SNLIQ  , & !inout
                  ALBOLD ,CM     ,CH     ,DX     ,DZ8W   ,Q2     , & !inout
-                 TAUSS  ,LAISUN ,LAISHA ,RB ,                     & !inout
+                 TAUSS  ,                                         & !inout
 !jref:start
                  QC     ,QSFC   ,PSFC   , & !in 
                  T2MV   ,T2MB  ,FSRV   , &
-                 FSRG   ,RSSUN   ,RSSHA ,ALBSND  ,ALBSNI, BGAP   ,WGAP,TGV,TGB,&
+                 FSRG   ,RSSUN   ,RSSHA ,BGAP   ,WGAP, TGV,TGB,&
                  Q1     ,Q2V    ,Q2B    ,Q2E    ,CHV   ,CHB     , & !out
                  EMISSI ,PAH    ,                                 &
-		 SHG,SHC,SHB,EVG,EVB,GHV,GHB,IRG,IRC,IRB,TR,EVC,CHLEAF,CHUC,CHV2,CHB2,&
-                 JULIAN, SWDOWN, PRCP, FB, GECROS1D )        
+		     SHG,SHC,SHB,EVG,EVB,GHV,GHB,IRG,IRC,IRB,TR,EVC,CHLEAF,CHUC,CHV2,CHB2, &
+		 EFLXB, HCPCT, ACC_SSOIL  )                                            !out
 !jref:end
 
     SICE(:) = MAX(0.0, SMC(:) - SH2O(:))   
@@ -806,7 +771,9 @@ contains
                  SMCWTD ,DEEPRECH,RECH                          , & !inout
                  CMC    ,ECAN   ,ETRAN  ,FWET   ,RUNSRF ,RUNSUB , & !out
                  QIN    ,QDIS   ,PONDING1       ,PONDING2,&
-                 QSNBOT                             &
+                 QSNBOT ,                            &
+		 QSNSUB ,QSNFRO ,QSUBC  ,QFROC  ,QFRZC   ,QMELTC, QEVAC, QDEWC, &
+                 ACC_QINSUR ,ACC_QSEVA  ,ACC_ETRANI                  &
 #ifdef WRF_HYDRO
                         ,sfcheadrt                     &
 #endif
@@ -816,16 +783,8 @@ contains
 
 ! compute carbon budgets (carbon storages and co2 & bvoc fluxes)
 
-   crop_active = .false.
-   dveg_active = .false.
-   IF (DVEG == 2 .OR. DVEG == 5 .OR. DVEG == 6) dveg_active = .true.
-   IF (OPT_CROP > 0 .and. CROPTYPE > 0) THEN
-     crop_active = .true.
-     dveg_active = .false.
-   ENDIF
-
-   IF (dveg_active) THEN
-     CALL CARBON (parameters,NSNOW  ,NSOIL  ,VEGTYP ,DT     ,ZSOIL  , & !in
+   IF (DVEG == 2 .OR. DVEG == 5 .OR. DVEG == 6 .OR. (DVEG == 10 .and. CROPTYPE == 0)) THEN
+    CALL CARBON (parameters,NSNOW  ,NSOIL  ,VEGTYP ,DT     ,ZSOIL  , & !in
                  DZSNSO ,STC    ,SMC    ,TV     ,TG     ,PSN    , & !in
                  FOLN   ,BTRAN  ,APAR   ,FVEG   ,IGS    , & !in
                  TROOT  ,IST    ,LAT    ,iloc   ,jloc   , & !in
@@ -834,7 +793,7 @@ contains
                  TOTLB  ,LAI    ,SAI    )                   !out
    END IF
 
-   IF (OPT_CROP == 1 .and. crop_active) THEN
+   IF (DVEG == 10 .and. CROPTYPE > 0) THEN
     CALL CARBON_CROP (parameters,NSNOW  ,NSOIL  ,VEGTYP ,DT     ,ZSOIL  ,JULIAN , & !in 
                          DZSNSO ,STC    ,SMC    ,TV     ,PSN    ,FOLN   ,BTRAN  , & !in
 			 SOLDN  ,T2M    ,                                         & !in
@@ -843,15 +802,16 @@ contains
                          GPP    ,NPP    ,NEE    ,AUTORS ,HETERS ,TOTSC  ,TOTLB, PGS    ) !out
    END IF
    
+
 ! water and energy balance check
 
-     CALL ERROR (parameters,SWDOWN ,FSA    ,FSR    ,FIRA   ,FSH    ,FCEV   , & !in
-                 FGEV   ,FCTR   ,SSOIL  ,BEG_WB ,CANLIQ ,CANICE , & !in
-                 SNEQV  ,WA     ,SMC    ,DZSNSO ,PRCP   ,ECAN   , & !in
-                 ETRAN  ,EDIR   ,RUNSRF ,RUNSUB ,DT     ,NSOIL  , & !in
-                 NSNOW  ,IST    ,ERRWAT ,ILOC   , JLOC  ,FVEG   , &
-                 SAV    ,SAG    ,FSRV   ,FSRG   ,ZWT    ,PAH    , &
-                 PAHV   ,PAHG   ,PAHB   )   !in ( Except ERRWAT, which is out )
+!     CALL ERROR (parameters,SWDOWN ,FSA    ,FSR    ,FIRA   ,FSH    ,FCEV   , & !in
+!                 FGEV   ,FCTR   ,SSOIL  ,BEG_WB ,CANLIQ ,CANICE , & !in
+!                 SNEQV  ,WA     ,SMC    ,DZSNSO ,PRCP   ,ECAN   , & !in
+!                 ETRAN  ,EDIR   ,RUNSRF ,RUNSUB ,DT     ,NSOIL  , & !in
+!                 NSNOW  ,IST    ,ERRWAT ,ILOC   , JLOC  ,FVEG   , &
+!                 SAV    ,SAG    ,FSRV   ,FSRG   ,ZWT    ,PAH    , &
+!                 PAHV   ,PAHG   ,PAHB   )   !in ( Except ERRWAT, which is out )
 
 ! urban - jref
     QFX = ETRAN + ECAN + EDIR
@@ -860,7 +820,7 @@ contains
        Q2B = QSFC
     END IF
 
-    IF(SNOWH <= 1.E-6 .OR. SNEQV <= 1.E-3) THEN
+    IF(SNOWH <= 1.E-8 .OR. SNEQV <= 1.E-6) THEN
      SNOWH = 0.0
      SNEQV = 0.0
     END IF
@@ -1063,8 +1023,6 @@ contains
   REAL                                   :: T       !current month (1.00, ..., 12.00)
 ! --------------------------------------------------------------------------------------------------
 
-IF (CROPTYPE == 0) THEN
-
   IF ( DVEG == 1 .or. DVEG == 3 .or. DVEG == 4 ) THEN
 
      IF (LAT >= 0.) THEN
@@ -1092,16 +1050,14 @@ IF (CROPTYPE == 0) THEN
     IF (LAI < 0.05) SAI = 0.0  ! if LAI below minimum, make sure SAI = 0
   ENDIF
 
-  IF (SAI < 0.05) SAI = 0.0                    ! MB: SAI CHECK, change to 0.05 v3.6
-  IF (LAI < 0.05 .OR. SAI == 0.0) LAI = 0.0  ! MB: LAI CHECK
+  IF (SAI < 0.05 .and. CROPTYPE == 0) SAI = 0.0                    ! MB: SAI CHECK, change to 0.05 v3.6
+  IF ((LAI < 0.05 .OR. SAI == 0.0) .and. CROPTYPE == 0) LAI = 0.0  ! MB: LAI CHECK
 
   IF ( ( VEGTYP == parameters%iswater ) .OR. ( VEGTYP == parameters%ISBARREN ) .OR. &
        ( VEGTYP == parameters%ISICE   ) .or. ( parameters%urban_flag ) ) THEN
      LAI  = 0.
      SAI  = 0.
   ENDIF
-
-ENDIF   ! CROPTYPE == 0
 
 !buried by snow
 
@@ -1117,8 +1073,6 @@ ENDIF   ! CROPTYPE == 0
      ESAI =  SAI*(1.-FB)
      IF (ESAI < 0.05 .and. CROPTYPE == 0) ESAI = 0.0                   ! MB: ESAI CHECK, change to 0.05 v3.6
      IF ((ELAI < 0.05 .OR. ESAI == 0.0) .and. CROPTYPE == 0) ELAI = 0.0  ! MB: LAI CHECK
-
-! set growing season flag
 
      IF ((TV .GT. parameters%TMIN .and. CROPTYPE == 0).or.(PGS > 2 .and. PGS < 7 .and. CROPTYPE > 0)) THEN
          IGS = 1.
@@ -1526,14 +1480,14 @@ ENDIF   ! CROPTYPE == 0
                      TV     ,TG     ,STC    ,SNOWH  ,EAH    ,TAH    , & !inout
                      SNEQVO ,SNEQV  ,SH2O   ,SMC    ,SNICE  ,SNLIQ  , & !inout
                      ALBOLD ,CM     ,CH     ,DX     ,DZ8W   ,Q2     , &   !inout
-                     TAUSS  ,LAISUN ,LAISHA ,RB ,                     & !inout
+                     TAUSS  ,                                         & !inout
 !jref:start
                      QC     ,QSFC   ,PSFC   , & !in 
                      T2MV   ,T2MB   ,FSRV   , &
-                     FSRG   ,RSSUN  ,RSSHA  ,ALBSND  ,ALBSNI,BGAP   ,WGAP,TGV,TGB,&
+                     FSRG   ,RSSUN  ,RSSHA  ,BGAP   ,WGAP,TGV,TGB,&
                      Q1     ,Q2V    ,Q2B    ,Q2E    ,CHV  ,CHB, EMISSI,PAH  ,&
 		     SHG,SHC,SHB,EVG,EVB,GHV,GHB,IRG,IRC,IRB,TR,EVC,CHLEAF,CHUC,CHV2,CHB2, &
-                     JULIAN, SWDOWN, PRCP, FB, GECROS1D )        
+		     EFLXB, HCPCT, ACC_SSOIL   )   !out 
 !jref:end                            
 
 ! --------------------------------------------------------------------------------------------------
@@ -1657,6 +1611,9 @@ ENDIF   ! CROPTYPE == 0
   REAL                              , INTENT(OUT)   :: LATHEAG !latent heat vap./sublimation (j/kg)
   LOGICAL                           , INTENT(OUT)   :: FROZEN_GROUND ! used to define latent heat pathway
   LOGICAL                           , INTENT(OUT)   :: FROZEN_CANOPY ! used to define latent heat pathway
+  REAL, DIMENSION(-NSNOW+1:NSOIL)   , INTENT(OUT)   :: HCPCT  !heat capacity [j/m3/k]
+  REAL                              , INTENT(OUT)   :: EFLXB  !energy influx from soil bottom (w/m2)
+  REAL                              , INTENT(INOUT) :: ACC_SSOIL  !energy influx from soil bottom (w/m2)
 
 !jref:start  
   REAL                              , INTENT(OUT)   :: FSRV    !veg. reflected solar radiation (w/m2)
@@ -1670,8 +1627,6 @@ ENDIF   ! CROPTYPE == 0
   REAL                              , INTENT(OUT)   :: T2MB   !2-m air temperature over bare ground part [k]
   REAL                              , INTENT(OUT)   :: BGAP
   REAL                              , INTENT(OUT)   :: WGAP
-  REAL, DIMENSION(1:2)              , INTENT(OUT)   :: ALBSND   !snow albedo (direct)
-  REAL, DIMENSION(1:2)              , INTENT(OUT)   :: ALBSNI   !snow albedo (diffuse)
 !jref:end
 
 ! input & output
@@ -1693,9 +1648,6 @@ ENDIF   ! CROPTYPE == 0
   REAL                              , INTENT(INOUT) :: CM     !momentum drag coefficient
   REAL                              , INTENT(INOUT) :: CH     !sensible heat exchange coefficient
   REAL                              , INTENT(INOUT) :: Q1
-  REAL                              , INTENT(INOUT) :: RB     !leaf boundary layer resistance (s/m)
-  REAL                              , INTENT(INOUT) :: LAISUN !sunlit leaf area index (m2/m2)
-  REAL                              , INTENT(INOUT) :: LAISHA !shaded leaf area index (m2/m2)
 !  REAL                                              :: Q2E
   REAL,                               INTENT(OUT)   :: EMISSI
   REAL,                               INTENT(OUT)   :: PAH    !precipitation advected heat - total (W/m2)
@@ -1706,7 +1658,7 @@ ENDIF   ! CROPTYPE == 0
   REAL                                              :: UR     !wind speed at height ZLVL (m/s)
   REAL                                              :: ZLVL   !reference height (m)
   REAL                                              :: FSUN   !sunlit fraction of canopy [-]
- ! REAL                                              :: RB     !leaf boundary layer resistance (s/m)
+  REAL                                              :: RB     !leaf boundary layer resistance (s/m)
   REAL                                              :: RSURF  !ground surface resistance (s/m)
   REAL                                              :: L_RSURF!Dry-layer thickness for computing RSURF (Sakaguchi and Zeng, 2009)
   REAL                                              :: D_RSURF!Reduced vapor diffusivity in soil for computing RSURF (SZ09)
@@ -1722,6 +1674,8 @@ ENDIF   ! CROPTYPE == 0
   REAL                                              :: EMG    !ground emissivity
   REAL                                              :: FIRE   !emitted IR (w/m2)
 
+  REAL                                              :: LAISUN !sunlit leaf area index (m2/m2)
+  REAL                                              :: LAISHA !shaded leaf area index (m2/m2)
   REAL                                              :: PSNSUN !sunlit photosynthesis (umolco2/m2/s)
   REAL                                              :: PSNSHA !shaded photosynthesis (umolco2/m2/s)
 !jref:start - for debug  
@@ -1733,7 +1687,7 @@ ENDIF   ! CROPTYPE == 0
 
   REAL, DIMENSION(-NSNOW+1:NSOIL)                   :: FACT   !temporary used in phase change
   REAL, DIMENSION(-NSNOW+1:NSOIL)                   :: DF     !thermal conductivity [w/m/k]
-  REAL, DIMENSION(-NSNOW+1:NSOIL)                   :: HCPCT  !heat capacity [j/m3/k]
+!  REAL, DIMENSION(-NSNOW+1:NSOIL)                   :: HCPCT  !heat capacity [j/m3/k]
   REAL                                              :: BDSNO  !bulk density of snow (kg/m3)
   REAL                                              :: FMELT  !melting factor for snow cover frac
   REAL                                              :: GX     !temporary variable
@@ -1783,14 +1737,14 @@ ENDIF   ! CROPTYPE == 0
   REAL,INTENT(OUT)                                  :: CHB2    !sensible heat conductance, canopy air to ZLVL air (m/s)
   REAL                                  :: noahmpres
 
-  REAL,                INTENT(IN)    :: JULIAN, SWDOWN, PRCP, FB
-  REAL,DIMENSION(1:60),INTENT(INOUT) :: GECROS1D
+  real :: dt_soil
+  real :: ssoil_avg
 
 !jref:end  
 
   REAL, PARAMETER                   :: MPE    = 1.E-6
   REAL, PARAMETER                   :: PSIWLT = -150.  !metric potential for wilting point (m)
-  REAL, PARAMETER                   :: Z0     = 0.002  ! Bare-soil roughness length (m) (i.e., under the canopy)
+  REAL, PARAMETER                   :: Z0     = 0.004  ! Bare-soil roughness length (m) (i.e., under the canopy)
 
 ! ---------------------------------------------------------------------------------------------------
 ! initialize fluxes from veg. fraction
@@ -1813,7 +1767,6 @@ ENDIF   ! CROPTYPE == 0
     CHLEAF    = 0.
     CHUC      = 0.
     CHV2      = 0.
-    RB        = 0.
 
 ! wind speed at reference height: ur >= 1
 
@@ -1858,7 +1811,7 @@ ENDIF   ! CROPTYPE == 0
         ZPD  = ZPDG
      END IF
 
-! special case for urban
+ ! special case for urban
 
      IF (parameters%urban_flag) THEN
        Z0MG = parameters%Z0MVT
@@ -1867,7 +1820,7 @@ ENDIF   ! CROPTYPE == 0
        ZPD  = ZPDG
      END IF
 
-     ZLVL = MAX(ZPD,parameters%HVT) + ZREF
+    ZLVL = MAX(ZPD,parameters%HVT) + ZREF
      IF(ZPDG >= ZLVL) ZLVL = ZPDG + ZREF
 !     UR   = UR*LOG(ZLVL/Z0M)/LOG(10./Z0M)       !input UR is at 10m
 
@@ -1894,7 +1847,7 @@ ENDIF   ! CROPTYPE == 0
                    ALBOLD  ,TAUSS   ,                            & !inout
                    FSUN    ,LAISUN  ,LAISHA  ,PARSUN  ,PARSHA  , & !out
                    SAV     ,SAG     ,FSR     ,FSA     ,FSRV    , & 
-                   FSRG    ,ALBSND  ,ALBSNI  ,BGAP    ,WGAP     )  !out
+                   FSRG    ,BGAP    ,WGAP    )            !out
 
 ! vegetation and ground emissivity
 
@@ -1944,7 +1897,7 @@ ENDIF   ! CROPTYPE == 0
          ! RSURF based on Sakaguchi and Zeng, 2009
          ! taking the "residual water content" to be the wilting point, 
          ! and correcting the exponent on the D term (typo in SZ09 ?)
-         L_RSURF = (-ZSOIL(1)) * ( exp ( (1.0 - MIN(1.0,SH2O(1)/parameters%SMCMAX(1))) ** parameters%RSURF_EXP ) - 1.0 ) / ( 2.71828 - 1.0 ) 
+         L_RSURF = (-ZSOIL(1)) * ( exp ( (1.0 - MIN(1.0,SH2O(1)/parameters%SMCMAX(1))) ** 5 ) - 1.0 ) / ( 2.71828 - 1.0 ) 
          D_RSURF = 2.2E-5 * parameters%SMCMAX(1) * parameters%SMCMAX(1) * ( 1.0 - parameters%SMCWLT(1) / parameters%SMCMAX(1) ) ** (2.0+3.0/parameters%BEXP(1))
          RSURF = L_RSURF / D_RSURF
        ELSEIF(OPT_RSF == 2) THEN
@@ -2018,8 +1971,7 @@ ENDIF   ! CROPTYPE == 0
                     T2MV    ,PSNSUN  ,PSNSHA  ,                   & !out
 !jref:start
                     QC      ,QSFC    ,PSFC    , & !in
-                    Q2V     ,CHV2, CHLEAF, CHUC, &
-                    SH2O,JULIAN, SWDOWN, PRCP, FB, FSR, GECROS1D)      ! Gecros 
+                    Q2V     ,CHV2, CHLEAF, CHUC)               !inout 
 !jref:end                            
     END IF
 
@@ -2114,12 +2066,23 @@ ENDIF   ! CROPTYPE == 0
 
 ! 3L snow & 4L soil temperatures
 
+    eflxb = 0.0
+    acc_ssoil = acc_ssoil + ssoil
+    
+    if(calculate_soil) then
+    
+    ssoil_avg = acc_ssoil / soil_update_steps
+    dt_soil = dt*soil_update_steps
+    
     CALL TSNOSOI (parameters,ICE     ,NSOIL   ,NSNOW   ,ISNOW   ,IST     , & !in
-                  TBOT    ,ZSNSO   ,SSOIL   ,DF      ,HCPCT   , & !in
-                  SAG     ,DT      ,SNOWH   ,DZSNSO  , & !in
+                  TBOT    ,ZSNSO   ,SSOIL_avg   ,DF      ,HCPCT   , & !in
+                  SAG     ,DT_soil      ,SNOWH   ,DZSNSO  , & !in
                   TG      ,ILOC    ,JLOC    ,                   & !in
-                  STC     )                                       !inout
+                  STC     ,EFLXB)                                       !inout
+    EFLXB = EFLXB * dt_soil
 
+    end if
+    
 ! adjusting snow surface temperature
      IF(OPT_STC == 2) THEN
       IF (SNOWH > 0.05 .AND. TG > TFRZ) THEN
@@ -2193,6 +2156,9 @@ ENDIF   ! CROPTYPE == 0
   REAL, DIMENSION(-NSNOW+1:    0)              :: TKSNO   !snow thermal conductivity (j/m3/k)
   REAL, DIMENSION(       1:NSOIL)              :: SICE    !soil ice content
 ! --------------------------------------------------------------------------------------------------
+
+HCPCT = 0.0
+DF = 0.0
 
 ! compute snow thermal conductivity and heat capacity
 
@@ -2437,7 +2403,7 @@ ENDIF   ! CROPTYPE == 0
                         ALBOLD  ,TAUSS   ,                            & !inout
                         FSUN    ,LAISUN  ,LAISHA  ,PARSUN  ,PARSHA  , & !out
                         SAV     ,SAG     ,FSR     ,FSA     ,FSRV    , &
-                        FSRG    ,ALBSND  ,ALBSNI  ,BGAP    ,WGAP    )   !out
+                        FSRG    ,BGAP    ,WGAP)            !out
 ! --------------------------------------------------------------------------------------------------
   IMPLICIT NONE
 ! --------------------------------------------------------------------------------------------------
@@ -2487,8 +2453,6 @@ ENDIF   ! CROPTYPE == 0
   REAL, INTENT(OUT)                    :: FSRG    !ground reflected solar radiation (w/m2)
   REAL, INTENT(OUT)                    :: BGAP
   REAL, INTENT(OUT)                    :: WGAP
-  REAL, DIMENSION(1:2), INTENT(OUT)    :: ALBSND   !snow albedo (direct)
-  REAL, DIMENSION(1:2), INTENT(OUT)    :: ALBSNI   !snow albedo (diffuse)
 !jref:end  
 
 ! local
@@ -2528,7 +2492,7 @@ ENDIF   ! CROPTYPE == 0
                 ALBGRD ,ALBGRI ,ALBD   ,ALBI   ,FABD   , & !out
                 FABI   ,FTDD   ,FTID   ,FTII   ,FSUN   , & !)   !out
                 FREVI  ,FREVD   ,FREGD ,FREGI  ,BGAP   , & !inout
-                WGAP   ,ALBSND ,ALBSNI )
+                WGAP)
 
 ! surface radiation
 
@@ -2564,7 +2528,7 @@ ENDIF   ! CROPTYPE == 0
                      ALBGRD ,ALBGRI ,ALBD   ,ALBI   ,FABD   , & !out
                      FABI   ,FTDD   ,FTID   ,FTII   ,FSUN   , & !out
                      FREVI  ,FREVD  ,FREGD  ,FREGI  ,BGAP   , & !out
-                     WGAP   ,ALBSND ,ALBSNI )
+                     WGAP)
 
 ! --------------------------------------------------------------------------------------------------
 ! surface albedos. also fluxes (per unit incoming direct and diffuse
@@ -2637,8 +2601,8 @@ ENDIF   ! CROPTYPE == 0
   REAL, DIMENSION(1:2) :: RHO      !leaf/stem reflectance weighted by fraction LAI and SAI
   REAL, DIMENSION(1:2) :: TAU      !leaf/stem transmittance weighted by fraction LAI and SAI
   REAL, DIMENSION(1:2) :: FTDI     !down direct flux below veg per unit dif flux = 0
-  REAL, DIMENSION(1:2), INTENT(OUT) :: ALBSND   !snow albedo (direct)
-  REAL, DIMENSION(1:2), INTENT(OUT) :: ALBSNI   !snow albedo (diffuse)
+  REAL, DIMENSION(1:2) :: ALBSND   !snow albedo (direct)
+  REAL, DIMENSION(1:2) :: ALBSNI   !snow albedo (diffuse)
 
   REAL                 :: VAI      !ELAI+ESAI
   REAL                 :: GDIR     !average projected leaf/stem area in solar direction
@@ -2658,8 +2622,6 @@ ENDIF   ! CROPTYPE == 0
     ALBI(IB) = 0.
     ALBGRD(IB) = 0.
     ALBGRI(IB) = 0.
-    ALBSND(IB) = 0.
-    ALBSNI(IB) = 0.
     FABD(IB) = 0.
     FABI(IB) = 0.
     FTDD(IB) = 0.
@@ -2897,12 +2859,14 @@ ENDIF   ! CROPTYPE == 0
 
    IF(SNEQV.LE.0.0) THEN
           TAUSS = 0.
+   ELSE IF (SNEQV.GT.800.) THEN
+          TAUSS = 0.
    ELSE
-          DELA0 = DT/parameters%TAU0
-          ARG   = parameters%GRAIN_GROWTH*(1./TFRZ-1./TG)
+          DELA0 = 1.E-6*DT
+          ARG   = 5.E3*(1./TFRZ-1./TG)
           AGE1  = EXP(ARG)
-          AGE2  = EXP(AMIN1(0.,parameters%EXTRA_GROWTH*ARG))
-          AGE3  = parameters%DIRT_SOOT
+          AGE2  = EXP(AMIN1(0.,10.*ARG))
+          AGE3  = 0.3
           TAGE  = AGE1+AGE2+AGE3
           DELA  = DELA0*TAGE
           DELS  = AMAX1(0.0,SNEQV-SNEQVO) / parameters%SWEMX
@@ -2943,8 +2907,8 @@ ENDIF   ! CROPTYPE == 0
   REAL :: SL2                  !2.*SL
   REAL :: SL1                  !1/SL
   REAL :: SL                   !adjustable parameter
-!  REAL, PARAMETER :: C1 = 0.2  !default in BATS 
-!  REAL, PARAMETER :: C2 = 0.5  !default in BATS
+  REAL, PARAMETER :: C1 = 0.2  !default in BATS 
+  REAL, PARAMETER :: C2 = 0.5  !default in BATS
 !  REAL, PARAMETER :: C1 = 0.2 * 2. ! double the default to match Sleepers River's
 !  REAL, PARAMETER :: C2 = 0.5 * 2. ! snow surface albedo (double aging effects)
 ! ---------------------------------------------------------------------------------------------
@@ -2955,17 +2919,17 @@ ENDIF   ! CROPTYPE == 0
 
 ! when cosz > 0
 
-        SL=parameters%BATS_COSZ
+        SL=2.0
         SL1=1./SL
         SL2=2.*SL
         CF1=((1.+SL1)/(1.+SL2*COSZ)-SL1)
         FZEN=AMAX1(CF1,0.)
 
-        ALBSNI(1)=parameters%BATS_VIS_NEW*(1.-parameters%BATS_VIS_AGE*FAGE)         
-        ALBSNI(2)=parameters%BATS_NIR_NEW*(1.-parameters%BATS_NIR_AGE*FAGE)        
+        ALBSNI(1)=0.95*(1.-C1*FAGE)         
+        ALBSNI(2)=0.65*(1.-C2*FAGE)        
 
-        ALBSND(1)=ALBSNI(1)+parameters%BATS_VIS_DIR*FZEN*(1.-ALBSNI(1))    !  vis direct
-        ALBSND(2)=ALBSNI(2)+parameters%BATS_VIS_DIR*FZEN*(1.-ALBSNI(2))    !  nir direct
+        ALBSND(1)=ALBSNI(1)+0.4*FZEN*(1.-ALBSNI(1))    !  vis direct
+        ALBSND(2)=ALBSNI(2)+0.4*FZEN*(1.-ALBSNI(2))    !  nir direct
 
   END SUBROUTINE SNOWALB_BATS
 
@@ -3355,8 +3319,7 @@ ENDIF   ! CROPTYPE == 0
                        SHC     ,EVG     ,EVC     ,TR      ,GH      , & !out
                        T2MV    ,PSNSUN  ,PSNSHA  ,                   & !out
                        QC      ,QSFC    ,PSFC    ,                   & !in
-                       Q2V     ,CAH2    ,CHLEAF  ,CHUC,              & !inout 
-                       SH2O,JULIAN, SWDOWN, PRCP, FB, FSR, GECROS1D)      ! Gecros 
+                       Q2V     ,CAH2    ,CHLEAF  ,CHUC    )            !inout 
 
 ! --------------------------------------------------------------------------------------------------
 ! use newton-raphson iteration to solve for vegetation (tv) and
@@ -3378,8 +3341,8 @@ ENDIF   ! CROPTYPE == 0
   INTEGER,                         INTENT(IN) :: ISNOW  !actual no. of snow layers
   INTEGER,                         INTENT(IN) :: VEGTYP !vegetation physiology type
   REAL,                            INTENT(IN) :: FVEG   !greeness vegetation fraction (-)
-  REAL,                            INTENT(INOUT) :: SAV    !solar rad absorbed by veg (w/m2)
-  REAL,                            INTENT(INOUT) :: SAG    !solar rad absorbed by ground (w/m2)
+  REAL,                            INTENT(IN) :: SAV    !solar rad absorbed by veg (w/m2)
+  REAL,                            INTENT(IN) :: SAG    !solar rad absorbed by ground (w/m2)
   REAL,                            INTENT(IN) :: LWDN   !atmospheric longwave radiation (w/m2)
   REAL,                            INTENT(IN) :: UR     !wind speed at height zlvl (m/s)
   REAL,                            INTENT(IN) :: UU     !wind speed in eastward dir (m/s)
@@ -3560,14 +3523,6 @@ ENDIF   ! CROPTYPE == 0
 
   INTEGER :: LITER     !Last iteration
 
-  REAL, INTENT(IN)                    :: JULIAN, SWDOWN, PRCP, FB
-  REAL, INTENT(INOUT)                 :: FSR
-  REAL,DIMENSION(1:60), INTENT(INOUT) :: GECROS1D 
-  REAL, DIMENSION(1:NSOIL), INTENT(IN) :: SH2O    !soil liquid water
-  
-  REAL :: ROOTD, WUL, WLL, Thickness, TLAIE, GLAIE, TLAI, GLAI, FRSU
-  INTEGER :: NROOT, J
-
 
   REAL :: T, TDC       !Kelvin to degree Celsius with limit -50 to +50
 
@@ -3593,11 +3548,11 @@ ENDIF   ! CROPTYPE == 0
         H      = 0.
         QFX    = 0.
 
-! limit LAI
+! convert grid-cell LAI to the fractional vegetated area (FVEG)
 
-        VAIE    = MIN(6.,VAI   )
-        LAISUNE = MIN(6.,LAISUN)
-        LAISHAE = MIN(6.,LAISHA)
+        VAIE    = MIN(6.,VAI    / FVEG)
+        LAISUNE = MIN(6.,LAISUN / FVEG)
+        LAISHAE = MIN(6.,LAISHA / FVEG)
 
 ! saturation vapor pressure at ground temperature
 
@@ -3715,57 +3670,6 @@ ENDIF   ! CROPTYPE == 0
          CALL  CANRES (parameters,PARSHA,TV    ,BTRAN ,EAH    ,SFCPRS, & !in
                        RSSHA ,PSNSHA,ILOC  ,JLOC   )          !out
         END IF
-
-     ! Call Gecros
-       IF (opt_crop == 2) then
-         IF ((GECROS1D(41).GT.0).and.(GECROS1D(42).LT.0.)) then   !Gecros
-           Thickness = 0.
-           NROOT = 0
-           ROOTD = GECROS1D(33)
-           WUL = 0.
-           WLL = 0.
-
-           DO J = 1,NSOIL
-            Thickness = Thickness + DZSNSO (J)
-            if (Thickness.lt.ROOTD/100.) then
-              NROOT = NROOT + 1
-            endif
-           ENDDO
-          
-           NROOT = NROOT + 1
-           NROOT = MAX(1,NROOT)
-        
-           Thickness = 0.
-       
-           DO J = 1,NROOT
-             Thickness = Thickness + DZSNSO (J) 
-             if (Thickness.gt.ROOTD/100.) then
-                WUL = WUL + ((ROOTD/100.-Thickness+DZSNSO(J))*1000.*(SH2O(J)-parameters%SMCWLT(J)))
-             else
-                WUL = WUL + (DZSNSO(J)*1000.*(SH2O(J)-parameters%SMCWLT(J)))
-             endif
-           ENDDO
-       
-           DO J = 1,NSOIL
-             WLL = WLL + (DZSNSO(J)*1000.*(SH2O(J)-parameters%SMCWLT(J)))
-           ENDDO
-           WLL = WLL - WUL
-         
-           CALL gecros (JULIAN, DT, 1, RB, RAHC, RAHG+RSURF, FB, SNOWH        , & !I
-               UR, SFCTMP, EAIR, SWDOWN, LWDN, PRCP, WUL, WLL                      , & !I
-               parameters%SMCWLT(1), parameters%DLEAF                              , & !I
-               GECROS1D                                                        , & !H                                    
-               SAV, SAG, FSR, FRSU, RSSUN, RSSHA)                    !O
-           
-               GLAI = GECROS1D(49)
-               TLAI = GECROS1D(50)
-
-               ! effective LAIs
-               TLAIE    = MIN(6.,TLAI    / FVEG)
-               GLAIE    = MIN(6.,GLAI    / FVEG) 
-         ENDIF     
-       ENDIF     
-       
      END IF
 
 ! prepare for sensible heat flux above veg.
@@ -3782,13 +3686,7 @@ ENDIF   ! CROPTYPE == 0
 
         CAW  = 1./RAWC
         CEW  = FWET*VAIE/RB
-
-        IF (OPT_CROP /= 2) THEN
-          CTW  = (1.-FWET)*(LAISUNE/(RB+RSSUN) + LAISHAE/(RB+RSSHA))
-        ELSE
-           !RSSUN and RSSHA are in resistance per unit LAI in the Jarvis and Ball-Berry!. RSSUN and RSSHA of Gecros are in s/m
-          CTW  = (1.-FWET)*(1./(RB/(FRSU*GLAIE)+RSSUN) + 1./(RB/((1.-FRSU)*GLAIE)+RSSHA)) !transpiration conductance leaf to canopy air
-        ENDIF
+        CTW  = (1.-FWET)*(LAISUNE/(RB+RSSUN) + LAISHAE/(RB+RSSHA))
         CGW  = 1./(RAWG+RSURF)
         COND = CAW + CEW + CTW + CGW
         AEA  = (EAIR*CAW + ESTG*CGW) / COND
@@ -4333,7 +4231,7 @@ ENDIF   ! CROPTYPE == 0
 
        TMPRB  = CWPC*50. / (1. - EXP(-CWPC/2.))
        RB     = TMPRB * SQRT(parameters%DLEAF/UC)
-       RB     = MAX(RB,100.0)
+       rb = max(rb,20.0)
 !       RB = 200
 
   END SUBROUTINE RAGRB
@@ -4405,7 +4303,7 @@ ENDIF   ! CROPTYPE == 0
     MOZOLD = MOZ
   
     IF(ZLVL <= ZPD) THEN
-       write(*,*) 'WARNING: critical problem: ZLVL <= ZPD; model stops'
+       write(*,*) 'critical problem: ZLVL <= ZPD; model stops'
        call wrf_error_fatal("STOP in Noah-MP")
     ENDIF
 
@@ -5015,7 +4913,7 @@ ENDIF   ! CROPTYPE == 0
                       TBOT    ,ZSNSO   ,SSOIL   ,DF      ,HCPCT   , & !in
                       SAG     ,DT      ,SNOWH   ,DZSNSO  , & !in
                       TG      ,ILOC    ,JLOC    ,                   & !in
-                      STC     )                                       !inout
+                      STC     ,EFLXB)                                       !inout
 ! --------------------------------------------------------------------------------------------------
 ! Compute snow (up to 3L) and soil (4L) temperature. Note that snow temperatures
 ! during melting season may exceed melting point (TFRZ) but later in PHASECHANGE
@@ -5044,6 +4942,7 @@ ENDIF   ! CROPTYPE == 0
     REAL, DIMENSION(-NSNOW+1:NSOIL), INTENT(IN)  :: DZSNSO !snow/soil layer thickness (m)
     REAL, DIMENSION(-NSNOW+1:NSOIL), INTENT(IN)  :: DF     !thermal conductivity
     REAL, DIMENSION(-NSNOW+1:NSOIL), INTENT(IN)  :: HCPCT  !heat capacity (J/m3/k)
+    REAL,                            INTENT(OUT) :: EFLXB !energy influx from soil bottom (w/m2)
 
 !input and output
 
@@ -5054,7 +4953,6 @@ ENDIF   ! CROPTYPE == 0
     INTEGER                                      :: IZ
     REAL                                         :: ZBOTSNO   !ZBOT from snow surface
     REAL, DIMENSION(-NSNOW+1:NSOIL)              :: AI, BI, CI, RHSTS
-    REAL                                         :: EFLXB !energy influx from soil bottom (w/m2)
     REAL, DIMENSION(-NSNOW+1:NSOIL)              :: PHI   !light through water (w/m2)
 
     REAL, DIMENSION(-NSNOW+1:NSOIL) :: TBEG
@@ -5494,6 +5392,7 @@ ENDIF   ! CROPTYPE == 0
         SNEQV  = MAX(0.,TEMP1-XM(1))  
         PROPOR = SNEQV/TEMP1
         SNOWH  = MAX(0.,PROPOR * SNOWH)
+	SNOWH  = MIN(MAX(SNOWH,SNEQV/500.0),SNEQV/50.0)  ! limit adjustment to a reasonable density
         HEATR  = HM(1) - HFUS*(TEMP1-SNEQV)/DT  
         IF (HEATR > 0.) THEN
               XM(1) = HEATR*DT/HFUS             
@@ -5536,11 +5435,6 @@ ENDIF   ! CROPTYPE == 0
             STC(J) = STC(J) + FACT(J)*HEATR
             IF (J <= 0) THEN                             ! snow
                IF (MLIQ(J)*MICE(J)>0.) STC(J) = TFRZ
-               IF (MICE(J) == 0.) THEN         ! BARLAGE
-                  STC(J) = TFRZ                ! BARLAGE
-                  HM(J+1) = HM(J+1) + HEATR    ! BARLAGE
-                  XM(J+1) = HM(J+1)*DT/HFUS    ! BARLAGE
-               ENDIF 
             END IF
          ENDIF
 
@@ -5718,7 +5612,9 @@ ENDIF   ! CROPTYPE == 0
                     SMCWTD ,DEEPRECH,RECH                          , & !inout
                     CMC    ,ECAN   ,ETRAN  ,FWET   ,RUNSRF ,RUNSUB , & !out
                     QIN    ,QDIS   ,PONDING1       ,PONDING2,        &
-                    QSNBOT                                           &
+                    QSNBOT ,                                         &
+		    QSNSUB ,QSNFRO ,QSUBC  ,QFROC  ,QFRZC   ,QMELTC, QEVAC, QDEWC, &
+		    ACC_QINSUR ,ACC_QSEVA  ,ACC_ETRANI &
 #ifdef WRF_HYDRO
                         ,sfcheadrt                     &
 #endif
@@ -5820,8 +5716,23 @@ ENDIF   ! CROPTYPE == 0
   REAL                                           :: QDRAIN  !soil-bottom free drainage [mm/s] 
   REAL                                           :: SNOFLOW !glacier flow [mm/s]
   REAL                                           :: FCRMAX !maximum of FCR (-)
+  REAL, INTENT(OUT)                :: QEVAC   !evaporation rate (mm/s)
+  REAL, INTENT(OUT)                :: QDEWC   !dew rate (mm/s)
+  REAL, INTENT(OUT)                :: QFROC   !frost rate (mm/s)
+  REAL, INTENT(OUT)                :: QSUBC   !sublimation rate (mm/s)
+  REAL, INTENT(OUT)                :: QMELTC  !melting rate of canopy snow (mm/s)
+  REAL, INTENT(OUT)                :: QFRZC   !refreezing rate of canopy liquid water (mm/s)
+
+  REAL, INTENT(INOUT)                            :: ACC_QINSUR  !water input on soil surface [m/s]
+  REAL, INTENT(INOUT)                            :: ACC_QSEVA   !soil surface evap rate [mm/s]
+  REAL, DIMENSION(       1:NSOIL) , INTENT(INOUT):: ACC_ETRANI  !transpiration rate (mm/s) [+]
 
   REAL, PARAMETER ::  WSLMAX = 5000.      !maximum lake water storage (mm)
+
+  real                     :: dt_soil
+  real                     :: qinsur_avg
+  real                     :: qseva_avg
+  real, dimension(1:nsoil) :: etrani_avg
 
 #ifdef WRF_HYDRO
   REAL                           , INTENT(INOUT)    :: sfcheadrt
@@ -5832,6 +5743,7 @@ ENDIF   ! CROPTYPE == 0
 
    ETRANI(1:NSOIL) = 0.
    SNOFLOW         = 0.
+   RUNSRF          = 0.
    RUNSUB          = 0.
    QINSUR          = 0.
 
@@ -5843,7 +5755,7 @@ ENDIF   ! CROPTYPE == 0
                   BDFALL ,FROZEN_CANOPY  , & !in     
                   CANLIQ ,CANICE ,TV     ,                 & !inout
                   CMC    ,ECAN   ,ETRAN  , & !out
-                  FWET      )                           !out
+                  FWET, QSUBC, QFROC, QFRZC, QMELTC, QEVAC, QDEWC      )                           !out
 
 ! sublimation, frost, evaporation, and dew
 
@@ -5874,6 +5786,7 @@ ENDIF   ! CROPTYPE == 0
          SH2O(1) = SH2O(1) + SICE(1)
          SICE(1) = 0.
       END IF
+      SMC(1) = SH2O(1) + SICE(1)
    END IF
 
 ! convert units (mm/s -> m/s)
@@ -5898,6 +5811,17 @@ ENDIF   ! CROPTYPE == 0
        QINSUR = QINSUR+sfcheadrt/DT*0.001  !sfcheadrt units (m)
 #endif
 
+acc_qinsur = acc_qinsur + qinsur
+acc_qseva  = acc_qseva  + qseva
+acc_etrani = acc_etrani + etrani
+
+    if(calculate_soil) then
+    
+    dt_soil = dt*soil_update_steps
+    qseva_avg  = acc_qseva / soil_update_steps
+    qinsur_avg = acc_qinsur / soil_update_steps
+    etrani_avg = acc_etrani / soil_update_steps
+
 ! lake/soil water balances
 
     IF (IST == 2) THEN                                        ! lake
@@ -5905,14 +5829,14 @@ ENDIF   ! CROPTYPE == 0
        IF(WSLAKE >= WSLMAX) RUNSRF = QINSUR*1000.             !mm/s
        WSLAKE = WSLAKE + (QINSUR-QSEVA)*1000.*DT -RUNSRF*DT   !mm
     ELSE                                                      ! soil
-       CALL      SOILWATER (parameters,NSOIL  ,NSNOW  ,DT     ,ZSOIL  ,DZSNSO , & !in
-                            QINSUR ,QSEVA  ,ETRANI ,SICE   ,ILOC   , JLOC , & !in
+       CALL      SOILWATER (parameters,NSOIL  ,NSNOW  ,DT_soil     ,ZSOIL  ,DZSNSO , & !in
+                            QINSUR_avg ,QSEVA_avg  ,ETRANI_avg ,SICE   ,ILOC   , JLOC , & !in
                             SH2O   ,SMC    ,ZWT    ,VEGTYP , & !inout
                            SMCWTD, DEEPRECH                       , & !inout
                             RUNSRF ,QDRAIN ,RUNSUB ,WCND   ,FCRMAX )   !out
  
        IF(OPT_RUN == 1) THEN 
-          CALL GROUNDWATER (parameters,NSNOW  ,NSOIL  ,DT     ,SICE   ,ZSOIL  , & !in
+          CALL GROUNDWATER (parameters,NSNOW  ,NSOIL  ,DT_soil     ,SICE   ,ZSOIL  , & !in
                             STC    ,WCND   ,FCRMAX ,ILOC   ,JLOC   , & !in
                             SH2O   ,ZWT    ,WA     ,WT     ,         & !inout
                             QIN    ,QDIS   )                           !out
@@ -5928,7 +5852,7 @@ ENDIF   ! CROPTYPE == 0
        ENDDO
  
        IF(OPT_RUN == 5) THEN
-          CALL SHALLOWWATERTABLE (parameters,NSNOW  ,NSOIL, ZSOIL, DT       , & !in
+          CALL SHALLOWWATERTABLE (parameters,NSNOW  ,NSOIL, ZSOIL, DT_soil       , & !in
                          DZSNSO ,SMCEQ   ,ILOC , JLOC        , & !in
                          SMC    ,ZWT    ,SMCWTD ,RECH, QDRAIN  ) !inout
 
@@ -5937,9 +5861,13 @@ ENDIF   ! CROPTYPE == 0
           WA = 0.
        ENDIF
 
-    ENDIF
+    RUNSRF = RUNSRF * dt_soil
+    RUNSUB = RUNSUB * dt_soil
 
-    RUNSUB       = RUNSUB + SNOFLOW         !mm/s
+    ENDIF
+    end if
+
+    RUNSUB       = RUNSUB + SNOFLOW*DT         !mm/s
 
   END SUBROUTINE WATER
 
@@ -5951,7 +5879,7 @@ ENDIF   ! CROPTYPE == 0
                        BDFALL ,FROZEN_CANOPY  ,  & !in      
                        CANLIQ ,CANICE ,TV     ,                 & !inout
                        CMC    ,ECAN   ,ETRAN  , & !out
-                       FWET      )                           !out
+                       FWET, QSUBC, QFROC, QFRZC, QMELTC, QEVAC, QDEWC      )                           !out
 
 ! ------------------------ code history ------------------------------
 ! canopy hydrology
@@ -5988,12 +5916,12 @@ ENDIF   ! CROPTYPE == 0
 ! ------------------------ local variables ---------------------------
   REAL                :: MAXSNO  !canopy capacity for snow interception (mm)
   REAL                :: MAXLIQ  !canopy capacity for rain interception (mm)
-  REAL                :: QEVAC   !evaporation rate (mm/s)
-  REAL                :: QDEWC   !dew rate (mm/s)
-  REAL                :: QFROC   !frost rate (mm/s)
-  REAL                :: QSUBC   !sublimation rate (mm/s)
-  REAL                :: QMELTC  !melting rate of canopy snow (mm/s)
-  REAL                :: QFRZC   !refreezing rate of canopy liquid water (mm/s)
+  REAL, INTENT(OUT)                :: QEVAC   !evaporation rate (mm/s)
+  REAL, INTENT(OUT)                :: QDEWC   !dew rate (mm/s)
+  REAL, INTENT(OUT)                :: QFROC   !frost rate (mm/s)
+  REAL, INTENT(OUT)                :: QSUBC   !sublimation rate (mm/s)
+  REAL, INTENT(OUT)                :: QMELTC  !melting rate of canopy snow (mm/s)
+  REAL, INTENT(OUT)                :: QFRZC   !refreezing rate of canopy liquid water (mm/s)
   REAL                :: CANMAS  !total canopy mass (kg/m2)
 ! --------------------------------------------------------------------
 ! initialization
@@ -6039,7 +5967,7 @@ ENDIF   ! CROPTYPE == 0
      
 ! wetted fraction of canopy
 
-      IF(CANICE.GT.0.) THEN
+      IF(CANICE.GT.0..AND.CANICE.GE.CANLIQ) THEN
            FWET = MAX(0.,CANICE) / MAX(MAXSNO,1.E-06)
       ELSE
            FWET = MAX(0.,CANLIQ) / MAX(MAXLIQ,1.E-06)
@@ -6051,17 +5979,19 @@ ENDIF   ! CROPTYPE == 0
       QMELTC = 0.
       QFRZC = 0.
 
+      CMC = CANLIQ + CANICE
+
       IF(CANICE.GT.1.E-6.AND.TV.GT.TFRZ) THEN
          QMELTC = MIN(CANICE/DT,(TV-TFRZ)*CICE*CANICE/DENICE/(DT*HFUS))
          CANICE = MAX(0.,CANICE - QMELTC*DT)
-         CANLIQ = MAX(0.,CANLIQ + QMELTC*DT)
+	 CANLIQ = MAX(0.,CMC - CANICE)
          TV     = FWET*TFRZ + (1.-FWET)*TV
       ENDIF
 
       IF(CANLIQ.GT.1.E-6.AND.TV.LT.TFRZ) THEN
          QFRZC  = MIN(CANLIQ/DT,(TFRZ-TV)*CWAT*CANLIQ/DENH2O/(DT*HFUS))
          CANLIQ = MAX(0.,CANLIQ - QFRZC*DT)
-         CANICE = MAX(0.,CANICE + QFRZC*DT)
+	 CANICE = MAX(0.,CMC - CANLIQ)
          TV     = FWET*TFRZ + (1.-FWET)*TV
       ENDIF
 
@@ -6169,9 +6099,9 @@ ENDIF   ! CROPTYPE == 0
 
 !to obtain equilibrium state of snow in glacier region
        
-   IF(SNEQV > 5000.) THEN   ! 5000 mm -> maximum water depth
+   IF(SNEQV > 2000.) THEN   ! 2000 mm -> maximum water depth
       BDSNOW      = SNICE(0) / DZSNSO(0)
-      SNOFLOW     = (SNEQV - 5000.)
+      SNOFLOW     = (SNEQV - 2000.)
       SNICE(0)    = SNICE(0)  - SNOFLOW 
       DZSNSO(0)   = DZSNSO(0) - SNOFLOW/BDSNOW
       SNOFLOW     = SNOFLOW / DT
@@ -6330,10 +6260,12 @@ ENDIF   ! CROPTYPE == 0
              IF(J /= 0) THEN
                 SNLIQ(J+1) = SNLIQ(J+1) + SNLIQ(J)
                 SNICE(J+1) = SNICE(J+1) + SNICE(J)
+		DZSNSO(J+1) = DZSNSO(J+1) + DZSNSO(J)
              ELSE
                IF (ISNOW_OLD < -1) THEN    ! MB/KM: change to ISNOW
                 SNLIQ(J-1) = SNLIQ(J-1) + SNLIQ(J)
                 SNICE(J-1) = SNICE(J-1) + SNICE(J)
+		DZSNSO(J-1) = DZSNSO(J-1) + DZSNSO(J)
                ELSE
 	         IF(SNICE(J) >= 0.) THEN
                   PONDING1 = SNLIQ(J)    ! ISNOW WILL GET SET TO ZERO BELOW; PONDING1 WILL GET 
@@ -6741,6 +6673,7 @@ ENDIF   ! CROPTYPE == 0
            ! The change in DZ due to compaction
 
            DZSNSO(J) = DZSNSO(J)*(1.+PDZDTC)
+	   DZSNSO(J) = max(DZSNSO(J),SNICE(J)/DENICE + SNLIQ(J)/DENH2O)
         END IF
 
         ! Pressure of overlying snow
@@ -6825,6 +6758,7 @@ ENDIF   ! CROPTYPE == 0
       SNEQV  = SNEQV - QSNSUB*DT + QSNFRO*DT
       PROPOR = SNEQV/TEMP
       SNOWH  = MAX(0.,PROPOR * SNOWH)
+      SNOWH  = MIN(MAX(SNOWH,SNEQV/500.0),SNEQV/50.0)  ! limit adjustment to a reasonable density
 
       IF(SNEQV < 0.) THEN
          SICE(1) = SICE(1) + SNEQV/(DZSNSO(1)*1000.)
@@ -6879,6 +6813,10 @@ ENDIF   ! CROPTYPE == 0
      QOUT = QOUT*DENH2O
      SNLIQ(J) = SNLIQ(J) - QOUT
      QIN = QOUT
+   END DO
+
+   DO J = ISNOW+1, 0
+     DZSNSO(J) = MAX(DZSNSO(J),SNLIQ(J)/DENH2O + SNICE(J)/DENICE)
    END DO
 
 ! Liquid water from snow bottom to soil
@@ -7062,12 +7000,12 @@ ENDIF   ! CROPTYPE == 0
 
     NITER = 1
 
-!    IF(OPT_INF == 1) THEN    !OPT_INF =2 may cause water imbalance
+    IF(PDDUM > 0.0 .and. OPT_INF == 1) THEN    !OPT_INF =2 may cause water imbalance
        NITER = 3
        IF (PDDUM*DT>DZSNSO(1)*parameters%SMCMAX(1) ) THEN
           NITER = NITER*2
        END IF
-!    END IF                 
+    END IF                 
 
     DTFINE  = DT / NITER
 
@@ -7191,7 +7129,7 @@ ENDIF   ! CROPTYPE == 0
 
    WD1 = 0.
    DO K = 1,NSOIL
-     WD1 = WD1 + (parameters%SMCMAX(1)-SH2O(K)) * DZSNSO(K) ! [m]
+     WD1 = WD1 + (parameters%SMCMAX(K)-SH2O(K)) * DZSNSO(K) ! [m]
    ENDDO
 
    DZFINE = 3.0 * (-ZSOIL(NSOIL)) / NFINE  
@@ -7203,8 +7141,8 @@ ENDIF   ! CROPTYPE == 0
 
    WD2 = 0.
    DO K = 1,NFINE
-     TEMP  = 1. + (ZWT-ZFINE(K))/parameters%PSISAT(1)
-     WD2   = WD2 + parameters%SMCMAX(1)*(1.-TEMP**(-1./parameters%BEXP(1)))*DZFINE
+     TEMP  = 1. + (ZWT-ZFINE(K))/parameters%PSISAT(K)
+     WD2   = WD2 + parameters%SMCMAX(K)*(1.-TEMP**(-1./parameters%BEXP(K)))*DZFINE
      IF(ABS(WD2-WD1).LE.0.01) THEN
         ZWT = ZFINE(K)
         EXIT
@@ -8826,9 +8764,9 @@ END SUBROUTINE CO2FLUX_CROP
       TDIFF = TC - parameters%GDDTBASE
     END IF
 
-    GDD     = (GDD + TDIFF * DT / 86400.0) * IPA * IHA
+    GDD     = (GDD + TDIFF) * IPA * IHA
 
-    GDDDAY  = GDD
+    GDDDAY  = GDD / (86400.0 / DT)
 
    ! Decide corn growth stage, based on Hybrid-Maize 
    !   PGS = 1 : Before planting
@@ -9043,55 +8981,6 @@ END SUBROUTINE PSN_CROP
 !
 !   end subroutine bvocflux
 ! ==================================================================================================
-
-!***************** SUBROUTINES FOR GECROS CROP SIMULATION ***************
-!*----------------------------------------------------------------------*
-!*  SUBROUTINE EMERG                                                    *
-!*  Purpose: This subroutine calculates germination and emergence of    *
-!*  the crop                                                            *
-!*                                                                      *
-!*  FORMAL PARAMETERS:  (I=input,O=output,C=control,IN=init,T=time)     *
-!*                                                                      *
-!*  name   type meaning                                    units  class *
-!*  ----   ---- -------                                    -----  ----- *
-!*  nowdate C12 Actual date                                dd.mm.yy  I  *
-!*  DT      R4  Time step of integration                     s       I  *
-!*  DD      R4  Drilling depth                               cm      I  *
-!*  TSOIL   R4  Soil temperature in first layer              K       I  *
-!*  TBEM    R4  Temperature threshold                        oC      I  *
-!*  EMA     R4  Intercept of function for emergence          oC      I  *
-!*  EMB     R4  Slope of function for emergence              oC      I  *
-!*  TTEM    R4  Cumulative temperature sum for emergence     oC     I/O *
-!*  EMERGENCE LOG Flag for emergence                          -     I/O *  
-!*  STATE_GECROS(41) = emerged yes/no                                   *
-!*  STATE_GECROS(43) = TTEM                                             *
-!*----------------------------------------------------------------------*
-
-SUBROUTINE EMERG(DT, TSOIL, DD, TBEM, EMA, EMB, STATE_GECROS)
-      IMPLICIT NONE
-      REAL, INTENT(IN) :: DT, TSOIL, DD, TBEM, EMA, EMB
-      REAL, DIMENSION(1:60), INTENT(INOUT) :: STATE_GECROS
-      REAL :: EMTH, TINT
-      SAVE
-      
-      IF ((TSOIL-273.15).LT.TBEM) THEN
-      ELSE
-           STATE_GECROS(43) = STATE_GECROS(43) + (TSOIL-273.15-TBEM)/(86400./DT)
-      ENDIF
-      
-      EMTH = EMA + EMB*DD
-           
-      IF (STATE_GECROS(43).GT.EMTH) THEN
-         STATE_GECROS(41)=1.
-!         write(*,*) 'Crop emerged on ', nowdate
-!		 read(*,*)
-      ELSE
-         STATE_GECROS(41)=-1.
-      ENDIF
-      
-      RETURN
-END SUBROUTINE EMERG
-
 ! ********************************* end of carbon subroutines *****************************
 ! ==================================================================================================
 
@@ -9099,7 +8988,7 @@ END SUBROUTINE EMERG
 
   subroutine noahmp_options(idveg     ,iopt_crs  ,iopt_btr  ,iopt_run  ,iopt_sfc  ,iopt_frz , & 
                              iopt_inf  ,iopt_rad  ,iopt_alb  ,iopt_snf  ,iopt_tbot, iopt_stc, &
-			     iopt_rsf , iopt_soil, iopt_pedo, iopt_crop )
+			     iopt_rsf )
 
   implicit none
 
@@ -9118,9 +9007,6 @@ END SUBROUTINE EMERG
   INTEGER,  INTENT(IN) :: iopt_stc  !snow/soil temperature time scheme (only layer 1)
                                     ! 1 -> semi-implicit; 2 -> full implicit (original Noah)
   INTEGER,  INTENT(IN) :: iopt_rsf  !surface resistance (1->Sakaguchi/Zeng; 2->Seller; 3->mod Sellers; 4->1+snow)
-  INTEGER,  INTENT(IN) :: iopt_soil !soil parameters set-up option
-  INTEGER,  INTENT(IN) :: iopt_pedo !pedo-transfer function
-  INTEGER,  INTENT(IN) :: iopt_crop !crop model option (0->none; 1->Liu et al.; 2->Gecros)
 
 ! -------------------------------------------------------------------------------------------------
 
@@ -9138,9 +9024,6 @@ END SUBROUTINE EMERG
   opt_tbot = iopt_tbot 
   opt_stc  = iopt_stc
   opt_rsf  = iopt_rsf
-  opt_soil = iopt_soil
-  opt_pedo = iopt_pedo
-  opt_crop = iopt_crop
   
   end subroutine noahmp_options
  
@@ -9270,19 +9153,7 @@ MODULE NOAHMP_TABLES
     REAL :: Z0SNO_TABLE    !snow surface roughness length (m) (0.002)
     REAL :: SSI_TABLE      !liquid water holding capacity for snowpack (m3/m3) (0.03)
     REAL :: SWEMX_TABLE    !new snow mass to fully cover old snow (mm)
-    REAL :: TAU0_TABLE          !tau0 from Yang97 eqn. 10a
-    REAL :: GRAIN_GROWTH_TABLE  !growth from vapor diffusion Yang97 eqn. 10b
-    REAL :: EXTRA_GROWTH_TABLE  !extra growth near freezing Yang97 eqn. 10c
-    REAL :: DIRT_SOOT_TABLE     !dirt and soot term Yang97 eqn. 10d
-    REAL :: BATS_COSZ_TABLE     !zenith angle snow albedo adjustment; b in Yang97 eqn. 15
-    REAL :: BATS_VIS_NEW_TABLE  !new snow visible albedo
-    REAL :: BATS_NIR_NEW_TABLE  !new snow NIR albedo
-    REAL :: BATS_VIS_AGE_TABLE  !age factor for diffuse visible snow albedo Yang97 eqn. 17
-    REAL :: BATS_NIR_AGE_TABLE  !age factor for diffuse NIR snow albedo Yang97 eqn. 18
-    REAL :: BATS_VIS_DIR_TABLE  !cosz factor for direct visible snow albedo Yang97 eqn. 15
-    REAL :: BATS_NIR_DIR_TABLE  !cosz factor for direct NIR snow albedo Yang97 eqn. 16
     REAL :: RSURF_SNOW_TABLE    !surface resistance for snow(s/m)
-    REAL :: RSURF_EXP_TABLE    !exponent in the shape parameter for soil resistance option 1
 
 ! MPTABLE.TBL crop parameters
 
@@ -9332,57 +9203,6 @@ MODULE NOAHMP_TABLES
     REAL :: GRAINPT_TABLE(NCROP,NSTAGE) ! fraction of carbohydrate flux to grain
     REAL :: BIO2LAI_TABLE(NCROP)        ! leaf are per living leaf biomass [m^2/kg]
 
-! MPTABLE.TBL optional parameters
-
-    REAL :: sr2006_theta_1500t_a        ! sand coefficient
-    REAL :: sr2006_theta_1500t_b        ! clay coefficient
-    REAL :: sr2006_theta_1500t_c        ! orgm coefficient
-    REAL :: sr2006_theta_1500t_d        ! sand*orgm coefficient
-    REAL :: sr2006_theta_1500t_e        ! clay*orgm coefficient
-    REAL :: sr2006_theta_1500t_f        ! sand*clay coefficient
-    REAL :: sr2006_theta_1500t_g        ! constant adjustment
-
-    REAL :: sr2006_theta_1500_a         ! theta_1500t coefficient
-    REAL :: sr2006_theta_1500_b         ! constant adjustment
-
-    REAL :: sr2006_theta_33t_a          ! sand coefficient
-    REAL :: sr2006_theta_33t_b          ! clay coefficient
-    REAL :: sr2006_theta_33t_c          ! orgm coefficient
-    REAL :: sr2006_theta_33t_d          ! sand*orgm coefficient
-    REAL :: sr2006_theta_33t_e          ! clay*orgm coefficient
-    REAL :: sr2006_theta_33t_f          ! sand*clay coefficient
-    REAL :: sr2006_theta_33t_g          ! constant adjustment
-
-    REAL :: sr2006_theta_33_a           ! theta_33t*theta_33t coefficient
-    REAL :: sr2006_theta_33_b           ! theta_33t coefficient
-    REAL :: sr2006_theta_33_c           ! constant adjustment
-
-    REAL :: sr2006_theta_s33t_a         ! sand coefficient
-    REAL :: sr2006_theta_s33t_b         ! clay coefficient
-    REAL :: sr2006_theta_s33t_c         ! orgm coefficient
-    REAL :: sr2006_theta_s33t_d         ! sand*orgm coefficient
-    REAL :: sr2006_theta_s33t_e         ! clay*orgm coefficient
-    REAL :: sr2006_theta_s33t_f         ! sand*clay coefficient
-    REAL :: sr2006_theta_s33t_g         ! constant adjustment
-
-    REAL :: sr2006_theta_s33_a          ! theta_s33t coefficient
-    REAL :: sr2006_theta_s33_b          ! constant adjustment
-
-    REAL :: sr2006_psi_et_a             ! sand coefficient
-    REAL :: sr2006_psi_et_b             ! clay coefficient
-    REAL :: sr2006_psi_et_c             ! theta_s33 coefficient
-    REAL :: sr2006_psi_et_d             ! sand*theta_s33 coefficient
-    REAL :: sr2006_psi_et_e             ! clay*theta_s33 coefficient
-    REAL :: sr2006_psi_et_f             ! sand*clay coefficient
-    REAL :: sr2006_psi_et_g             ! constant adjustment
-
-    REAL :: sr2006_psi_e_a              ! psi_et*psi_et coefficient
-    REAL :: sr2006_psi_e_b              ! psi_et coefficient
-    REAL :: sr2006_psi_e_c              ! constant adjustment
-
-    REAL :: sr2006_smcmax_a             ! sand adjustment
-    REAL :: sr2006_smcmax_b             ! constant adjustment
-
 CONTAINS
 
   subroutine read_mp_veg_parameters(DATASET_IDENTIFIER)
@@ -9390,7 +9210,6 @@ CONTAINS
     character(len=*), intent(in) :: DATASET_IDENTIFIER
     integer :: ierr
     INTEGER :: IK,IM
-    logical :: file_named 
 
     integer :: NVEG
     character(len=256) :: VEG_DATASET_DESCRIPTION
@@ -9497,15 +9316,12 @@ CONTAINS
     HIGH_DENSITY_RESIDENTIAL_TABLE  = -99999
     HIGH_INTENSITY_INDUSTRIAL_TABLE = -99999
 
-    inquire( file='MPTABLE.TBL', exist=file_named ) 
-    if ( file_named ) then
-      open(15, file="MPTABLE.TBL", status='old', form='formatted', action='read', iostat=ierr)
-    else
-      open(15, status='old', form='formatted', action='read', iostat=ierr)
-    end if
-
+    open(15, file="MPTABLE.TBL", status='old', form='formatted', action='read', iostat=ierr)
     if (ierr /= 0) then
-       write(*,'("WARNING: Cannot find file MPTABLE.TBL")')
+       write(*,'("****** Error ******************************************************")')
+       write(*,'("Cannot find file MPTABLE.TBL")')
+       write(*,'("STOP")')
+       write(*,'("*******************************************************************")')
        call wrf_error_fatal("STOP in Noah-MP read_mp_veg_parameters")
     endif
 
@@ -9516,8 +9332,8 @@ CONTAINS
        read(15,noahmp_modis_veg_categories)
        read(15,noahmp_modis_parameters)
     else
-       write(*,'("WARNING: Unrecognized DATASET_IDENTIFIER in subroutine READ_MP_VEG_PARAMETERS")')
-       write(*,'("WARNING: DATASET_IDENTIFIER = ''", A, "''")') trim(DATASET_IDENTIFIER)
+       write(*,'("Unrecognized DATASET_IDENTIFIER in subroutine READ_MP_VEG_PARAMETERS")')
+       write(*,'("DATASET_IDENTIFIER = ''", A, "''")') trim(DATASET_IDENTIFIER)
        call wrf_error_fatal("STOP in Noah-MP read_mp_veg_parameters")
     endif
     close(15)
@@ -9621,7 +9437,6 @@ CONTAINS
     CHARACTER*4         :: SLTYPE
     INTEGER             :: ITMP, NUM_SLOPE, LC
     CHARACTER(len=256)  :: message
-    logical             :: file_named 
     
 
     ! Initialize our variables to bad values, so that if the namelist read fails, we come to a screeching halt as soon as we try to use anything.
@@ -9646,87 +9461,74 @@ CONTAINS
 !
 !-----READ IN SOIL PROPERTIES FROM SOILPARM.TBL
 !
-    inquire( file='SOILPARM.TBL', exist=file_named ) 
-    if ( file_named ) then
-      open(21, file='SOILPARM.TBL',form='formatted',status='old',iostat=ierr)
-    else
-      open(21, form='formatted',status='old',iostat=ierr)
-    end if
-
+    OPEN(19, FILE='SOILPARM.TBL',FORM='FORMATTED',STATUS='OLD',IOSTAT=ierr)
     IF(ierr .NE. 0 ) THEN
       WRITE(message,FMT='(A)') 'module_sf_noahmpdrv.F: read_mp_soil_parameters: failure opening SOILPARM.TBL'
       CALL wrf_error_fatal ( message )
     END IF
 
-    READ (21,*)
-    READ (21,*) SLTYPE
-    READ (21,*) SLCATS
+    READ (19,*)
+    READ (19,*) SLTYPE
+    READ (19,*) SLCATS
     WRITE( message , * ) 'SOIL TEXTURE CLASSIFICATION = ', TRIM ( SLTYPE ) , ' FOUND', &
                SLCATS,' CATEGORIES'
     CALL wrf_message ( message )
 
     DO LC=1,SLCATS
-      READ (21,*) ITMP,BEXP_TABLE(LC),SMCDRY_TABLE(LC),F1_TABLE(LC),SMCMAX_TABLE(LC),    &
+      READ (19,*) ITMP,BEXP_TABLE(LC),SMCDRY_TABLE(LC),F1_TABLE(LC),SMCMAX_TABLE(LC),    &
                   SMCREF_TABLE(LC),PSISAT_TABLE(LC),DKSAT_TABLE(LC), DWSAT_TABLE(LC),   &
                   SMCWLT_TABLE(LC), QUARTZ_TABLE(LC)
     ENDDO
 
-    CLOSE (21)
+    CLOSE (19)
 
 !
 !-----READ IN GENERAL PARAMETERS FROM GENPARM.TBL
 !
-    inquire( file='GENPARM.TBL', exist=file_named ) 
-    if ( file_named ) then
-      open(22, file='GENPARM.TBL',form='formatted',status='old',iostat=ierr)
-    else
-      open(22, form='formatted',status='old',iostat=ierr)
-    end if
-
+    OPEN(19, FILE='GENPARM.TBL',FORM='FORMATTED',STATUS='OLD',IOSTAT=ierr)
     IF(ierr .NE. 0 ) THEN
       WRITE(message,FMT='(A)') 'module_sf_noahlsm.F: read_mp_soil_parameters: failure opening GENPARM.TBL'
       CALL wrf_error_fatal ( message )
     END IF
 
-    READ (22,*)
-    READ (22,*)
-    READ (22,*) NUM_SLOPE
+    READ (19,*)
+    READ (19,*)
+    READ (19,*) NUM_SLOPE
 
     DO LC=1,NUM_SLOPE
-        READ (22,*) SLOPE_TABLE(LC)
+        READ (19,*) SLOPE_TABLE(LC)
     ENDDO
 
-    READ (22,*)
-    READ (22,*)
-    READ (22,*)
-    READ (22,*)
-    READ (22,*)
-    READ (22,*) CSOIL_TABLE
-    READ (22,*)
-    READ (22,*)
-    READ (22,*)
-    READ (22,*) REFDK_TABLE
-    READ (22,*)
-    READ (22,*) REFKDT_TABLE
-    READ (22,*)
-    READ (22,*) FRZK_TABLE
-    READ (22,*)
-    READ (22,*) ZBOT_TABLE
-    READ (22,*)
-    READ (22,*) CZIL_TABLE
-    READ (22,*)
-    READ (22,*)
-    READ (22,*)
-    READ (22,*)
+    READ (19,*)
+    READ (19,*)
+    READ (19,*)
+    READ (19,*)
+    READ (19,*)
+    READ (19,*) CSOIL_TABLE
+    READ (19,*)
+    READ (19,*)
+    READ (19,*)
+    READ (19,*) REFDK_TABLE
+    READ (19,*)
+    READ (19,*) REFKDT_TABLE
+    READ (19,*)
+    READ (19,*) FRZK_TABLE
+    READ (19,*)
+    READ (19,*) ZBOT_TABLE
+    READ (19,*)
+    READ (19,*) CZIL_TABLE
+    READ (19,*)
+    READ (19,*)
+    READ (19,*)
+    READ (19,*)
 
-    CLOSE (22)
+    CLOSE (19)
 
   end subroutine read_mp_soil_parameters
 
   subroutine read_mp_rad_parameters()
     implicit none
     integer :: ierr
-    logical :: file_named 
 
     REAL :: ALBICE(MBAND),ALBLAK(MBAND),OMEGAS(MBAND),BETADS,BETAIS,EG(2)
     REAL :: ALBSAT_VIS(MSC)
@@ -9747,15 +9549,12 @@ CONTAINS
     BETAIS_TABLE     = -1.E36
     EG_TABLE         = -1.E36
 
-    inquire( file='MPTABLE.TBL', exist=file_named ) 
-    if ( file_named ) then
-      open(15, file="MPTABLE.TBL", status='old', form='formatted', action='read', iostat=ierr)
-    else
-      open(15, status='old', form='formatted', action='read', iostat=ierr)
-    end if
-
+    open(15, file="MPTABLE.TBL", status='old', form='formatted', action='read', iostat=ierr)
     if (ierr /= 0) then
-       write(*,'("WARNING: Cannot find file MPTABLE.TBL")')
+       write(*,'("****** Error ******************************************************")')
+       write(*,'("Cannot find file MPTABLE.TBL")')
+       write(*,'("STOP")')
+       write(*,'("*******************************************************************")')
        call wrf_error_fatal("STOP in Noah-MP read_mp_rad_parameters")
     endif
 
@@ -9778,17 +9577,10 @@ CONTAINS
   subroutine read_mp_global_parameters()
     implicit none
     integer :: ierr
-    logical :: file_named 
 
-    REAL :: CO2,O2,TIMEAN,FSATMX,Z0SNO,SSI, &
-            SWEMX,TAU0,GRAIN_GROWTH,EXTRA_GROWTH,DIRT_SOOT,&
-	    BATS_COSZ,BATS_VIS_NEW,BATS_NIR_NEW,BATS_VIS_AGE,BATS_NIR_AGE,BATS_VIS_DIR,BATS_NIR_DIR,&
-	    RSURF_SNOW,RSURF_EXP
+    REAL :: CO2,O2,TIMEAN,FSATMX,Z0SNO,SSI,SWEMX,RSURF_SNOW
 
-    NAMELIST / noahmp_global_parameters / CO2,O2,TIMEAN,FSATMX,Z0SNO,SSI, &
-            SWEMX,TAU0,GRAIN_GROWTH,EXTRA_GROWTH,DIRT_SOOT,&
-	    BATS_COSZ,BATS_VIS_NEW,BATS_NIR_NEW,BATS_VIS_AGE,BATS_NIR_AGE,BATS_VIS_DIR,BATS_NIR_DIR,&
-	    RSURF_SNOW,RSURF_EXP
+    NAMELIST / noahmp_global_parameters / CO2,O2,TIMEAN,FSATMX,Z0SNO,SSI,SWEMX,RSURF_SNOW
 
 
     ! Initialize our variables to bad values, so that if the namelist read fails, we come to a screeching halt as soon as we try to use anything.
@@ -9799,29 +9591,14 @@ CONTAINS
      Z0SNO_TABLE     = -1.E36
        SSI_TABLE     = -1.E36
      SWEMX_TABLE     = -1.E36
-        TAU0_TABLE   = -1.E36
-GRAIN_GROWTH_TABLE   = -1.E36
-EXTRA_GROWTH_TABLE   = -1.E36
-   DIRT_SOOT_TABLE   = -1.E36
-   BATS_COSZ_TABLE   = -1.E36
-BATS_VIS_NEW_TABLE   = -1.E36
-BATS_NIR_NEW_TABLE   = -1.E36
-BATS_VIS_AGE_TABLE   = -1.E36
-BATS_NIR_AGE_TABLE   = -1.E36
-BATS_VIS_DIR_TABLE   = -1.E36
-BATS_NIR_DIR_TABLE   = -1.E36
 RSURF_SNOW_TABLE     = -1.E36
- RSURF_EXP_TABLE     = -1.E36
 
-    inquire( file='MPTABLE.TBL', exist=file_named ) 
-    if ( file_named ) then
-      open(15, file="MPTABLE.TBL", status='old', form='formatted', action='read', iostat=ierr)
-    else
-      open(15, status='old', form='formatted', action='read', iostat=ierr)
-    end if
-
+    open(15, file="MPTABLE.TBL", status='old', form='formatted', action='read', iostat=ierr)
     if (ierr /= 0) then
-       write(*,'("WARNING: Cannot find file MPTABLE.TBL")')
+       write(*,'("****** Error ******************************************************")')
+       write(*,'("Cannot find file MPTABLE.TBL")')
+       write(*,'("STOP")')
+       write(*,'("*******************************************************************")')
        call wrf_error_fatal("STOP in Noah-MP read_mp_global_parameters")
     endif
 
@@ -9835,26 +9612,13 @@ RSURF_SNOW_TABLE     = -1.E36
      Z0SNO_TABLE     = Z0SNO
        SSI_TABLE     = SSI
      SWEMX_TABLE     = SWEMX
-        TAU0_TABLE   = TAU0
-GRAIN_GROWTH_TABLE   = GRAIN_GROWTH
-EXTRA_GROWTH_TABLE   = EXTRA_GROWTH
-   DIRT_SOOT_TABLE   = DIRT_SOOT
-   BATS_COSZ_TABLE   = BATS_COSZ
-BATS_VIS_NEW_TABLE   = BATS_VIS_NEW
-BATS_NIR_NEW_TABLE   = BATS_NIR_NEW
-BATS_VIS_AGE_TABLE   = BATS_VIS_AGE
-BATS_NIR_AGE_TABLE   = BATS_NIR_AGE
-BATS_VIS_DIR_TABLE   = BATS_VIS_DIR
-BATS_NIR_DIR_TABLE   = BATS_NIR_DIR
 RSURF_SNOW_TABLE     = RSURF_SNOW
- RSURF_EXP_TABLE     = RSURF_EXP
 
   end subroutine read_mp_global_parameters
 
   subroutine read_mp_crop_parameters()
     implicit none
     integer :: ierr
-    logical :: file_named 
 
  INTEGER                   :: DEFAULT_CROP
  INTEGER, DIMENSION(NCROP) :: PLTDAY
@@ -9956,15 +9720,12 @@ RSURF_SNOW_TABLE     = RSURF_SNOW
       BIO2LAI_TABLE     = -1.E36
 
 
-    inquire( file='MPTABLE.TBL', exist=file_named ) 
-    if ( file_named ) then
-      open(15, file="MPTABLE.TBL", status='old', form='formatted', action='read', iostat=ierr)
-    else
-      open(15, status='old', form='formatted', action='read', iostat=ierr)
-    end if
-
+    open(15, file="MPTABLE.TBL", status='old', form='formatted', action='read', iostat=ierr)
     if (ierr /= 0) then
-       write(*,'("WARNING: Cannot find file MPTABLE.TBL")')
+       write(*,'("****** Error ******************************************************")')
+       write(*,'("Cannot find file MPTABLE.TBL")')
+       write(*,'("STOP")')
+       write(*,'("*******************************************************************")')
        call wrf_error_fatal("STOP in Noah-MP read_mp_crop_parameters")
     endif
 
@@ -10075,48 +9836,6 @@ RSURF_SNOW_TABLE     = RSURF_SNOW
       BIO2LAI_TABLE      = BIO2LAI
 
   end subroutine read_mp_crop_parameters
-
-  subroutine read_mp_optional_parameters()
-    implicit none
-    integer :: ierr
-    logical :: file_named 
-
-    NAMELIST / noahmp_optional_parameters /                                &
-         sr2006_theta_1500t_a, sr2006_theta_1500t_b, sr2006_theta_1500t_c, &
-         sr2006_theta_1500t_d, sr2006_theta_1500t_e, sr2006_theta_1500t_f, &
-         sr2006_theta_1500t_g                                            , &
-         sr2006_theta_1500_a , sr2006_theta_1500_b                       , &
-         sr2006_theta_33t_a  , sr2006_theta_33t_b  , sr2006_theta_33t_c  , &
-         sr2006_theta_33t_d  , sr2006_theta_33t_e  , sr2006_theta_33t_f  , &
-         sr2006_theta_33t_g                                              , &
-         sr2006_theta_33_a   , sr2006_theta_33_b   , sr2006_theta_33_c   , &
-         sr2006_theta_s33t_a , sr2006_theta_s33t_b , sr2006_theta_s33t_c , &
-         sr2006_theta_s33t_d , sr2006_theta_s33t_e , sr2006_theta_s33t_f , &
-         sr2006_theta_s33t_g                                             , &
-         sr2006_theta_s33_a  , sr2006_theta_s33_b                        , &
-         sr2006_psi_et_a     , sr2006_psi_et_b     , sr2006_psi_et_c     , &
-         sr2006_psi_et_d     , sr2006_psi_et_e     , sr2006_psi_et_f     , &
-         sr2006_psi_et_g                                                 , &
-         sr2006_psi_e_a      , sr2006_psi_e_b      , sr2006_psi_e_c      , &
-         sr2006_smcmax_a     , sr2006_smcmax_b
-
-    inquire( file='MPTABLE.TBL', exist=file_named ) 
-    if ( file_named ) then
-      open(15, file="MPTABLE.TBL", status='old', form='formatted', action='read', iostat=ierr)
-    else
-      open(15, status='old', form='formatted', action='read', iostat=ierr)
-    end if
-
-    if (ierr /= 0) then
-       write(*,'("WARNING: Cannot find file MPTABLE.TBL")')
-       call wrf_error_fatal("STOP in Noah-MP read_mp_optional_parameters")
-    endif
-
-    read(15,noahmp_optional_parameters)
-    close(15)
-
-
-  end subroutine read_mp_optional_parameters
 
 END MODULE NOAHMP_TABLES
 
